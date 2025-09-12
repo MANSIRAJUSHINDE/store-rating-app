@@ -1,0 +1,650 @@
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\src\controllers\authController.js -----
+
+const { validationResult } = require('express-validator');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const { User } = require('../models');
+
+// Signup function
+exports.signup = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { name, email, address, password } = req.body;
+
+    // Check if email already exists
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email already exists' });
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create new user
+    const user = await User.create({
+      name,
+      email,
+      address,
+      password: hashedPassword,
+      role: 'normal', // Default role
+    });
+
+    res.status(201).json({ message: 'User registered successfully' });
+  } catch (error) {
+    console.error('Signup error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Login function
+exports.login = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({ token });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Update Password function
+exports.updatePassword = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { oldPassword, newPassword } = req.body;
+    const user = req.user;
+
+    // Check if old password matches
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Old password is incorrect' });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    await user.save();
+
+    res.json({ message: 'Password updated successfully.' });
+
+  } catch (error) {
+    console.error('Update password error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\src\controllers\adminController.js -----
+
+const { User, Store, Rating } = require('../models');
+const { Op } = require('sequelize');
+
+// âœ… List all users with filters (name, email, role)
+exports.listUsers = async (req, res) => {
+  try {
+    const { name, email, role } = req.query;
+    const filters = {};
+    if (name) filters.name = { [Op.like]: `%${name}%` };
+    if (email) filters.email = { [Op.like]: `%${email}%` };
+    if (role) filters.role = role;
+
+    const users = await User.findAll({
+      where: filters,
+      attributes: ['id', 'name', 'email', 'address', 'role'],
+    });
+
+    res.json(users);
+  } catch (error) {
+    console.error('List users error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// âœ… Get user details by ID, include rating if Store Owner
+exports.getUserDetails = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id, {
+      attributes: ['id', 'name', 'email', 'address', 'role'],
+      include: [{
+        model: Store,
+        as: 'ownedStores',
+        include: [{
+          model: Rating,
+          as: 'ratings',
+        }]
+      }]
+    });
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    let response = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      address: user.address,
+      role: user.role,
+    };
+
+    if (user.role === 'store_owner' && user.ownedStores.length > 0) {
+      // Calculate total ratings across all owned stores
+      let totalRatings = 0;
+      let ratingsCount = 0;
+      user.ownedStores.forEach(store => {
+        store.ratings.forEach(rating => {
+          totalRatings += rating.rating;
+          ratingsCount++;
+        });
+      });
+      const avgRating = ratingsCount ? totalRatings / ratingsCount : null;
+      response.storeRating = avgRating;
+    }
+
+    res.json(response);
+  } catch (error) {
+    console.error('Get user details error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// âœ… Dashboard stats: total users, stores, ratings
+exports.dashboardStats = async (req, res) => {
+  try {
+    const totalUsers = await User.count();
+    const totalStores = await Store.count();
+    const totalRatings = await Rating.count();
+
+    res.json({
+      totalUsers,
+      totalStores,
+      totalRatings
+    });
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// âœ… Add new user (admin functionality)
+exports.addUser = async (req, res) => {
+  try {
+    const { name, email, password, address, role } = req.body;
+
+    // Check if email already exists
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email already exists' });
+    }
+
+    // Hash password
+    const bcrypt = require('bcrypt');
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = await User.create({
+      name,
+      email,
+      address,
+      password: hashedPassword,
+      role
+    });
+
+    res.status(201).json({
+      message: 'User created successfully',
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        address: newUser.address,
+        role: newUser.role
+      }
+    });
+  } catch (error) {
+    console.error('Add user error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\src\controllers\storeController.js -----
+
+const { Store, Rating, User } = require('../models');
+const { Op } = require('sequelize');
+
+// Admin: Add new store
+exports.createStore = async (req, res) => {
+  try {
+    const { name, email, address } = req.body;
+    const store = await Store.create({ name, email, address });
+    res.status(201).json(store);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// List all stores with optional search by name/address
+exports.listStores = async (req, res) => {
+  try {
+    const { name, address } = req.query;
+    const filters = {};
+    if (name) filters.name = { [Op.like]: `%${name}%` };
+    if (address) filters.address = { [Op.like]: `%${address}%` };
+
+    const stores = await Store.findAll({
+      where: filters,
+      include: [
+        {
+          model: Rating,
+          include: [{ model: User, attributes: ['id', 'name'] }],
+        },
+      ],
+    });
+
+    // Calculate overall rating
+    const result = stores.map(store => {
+      const ratings = store.Ratings.map(r => r.rating);
+      const avgRating = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
+      return {
+        id: store.id,
+        name: store.name,
+        email: store.email,
+        address: store.address,
+        overallRating: avgRating,
+        ratings: store.Ratings,
+      };
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\src\models\User.js -----
+
+const { Model, DataTypes } = require('sequelize');
+
+class User extends Model {}
+
+module.exports = (sequelize) => {
+  User.init(
+    {
+      name: {
+        type: DataTypes.STRING(60),
+        allowNull: false,
+      },
+      email: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+        unique: true,
+      },
+      password: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+      },
+      address: {
+        type: DataTypes.STRING(400),
+        allowNull: false,
+      },
+      role: {
+        type: DataTypes.ENUM('admin', 'user', 'store_owner'),
+        defaultValue: 'user',
+      },
+    },
+    { sequelize, modelName: 'User', tableName: 'users', timestamps: true }
+  );
+
+  return User;
+};
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\src\models\Store.js -----
+
+const { Model, DataTypes } = require('sequelize');
+
+class Store extends Model {}
+
+module.exports = (sequelize) => {
+  Store.init(
+    {
+      name: { type: DataTypes.STRING(60), allowNull: false },
+      email: { type: DataTypes.STRING(255), allowNull: false, unique: true },
+      address: { type: DataTypes.STRING(400), allowNull: false },
+    },
+    { sequelize, modelName: 'Store', tableName: 'stores', timestamps: true }
+  );
+
+  return Store;
+};
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\src\models\Rating.js -----
+
+const { Model, DataTypes } = require('sequelize');
+
+class Rating extends Model {}
+
+module.exports = (sequelize) => {
+  Rating.init(
+    {
+      rating: { type: DataTypes.INTEGER, allowNull: false },
+    },
+    { sequelize, modelName: 'Rating', tableName: 'ratings', timestamps: true }
+  );
+
+  return Rating;
+};
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\src\routes\authRoutes.js -----
+
+const express = require('express');
+const router = express.Router();
+const { signup, login, updatePassword } = require('../controllers/authController');
+const { authenticate } = require('../middleware/authMiddleware');
+const { body } = require('express-validator');
+
+// Signup and Login routes
+router.post('/signup', signup);
+router.post('/login', login);
+
+// Update password route
+router.put('/update-password', authenticate, [
+  body('oldPassword').notEmpty().withMessage('Old password is required'),
+  body('newPassword')
+    .isLength({ min: 8, max: 16 })
+    .withMessage('Password must be between 8 and 16 characters')
+    .matches(/[A-Z]/)
+    .withMessage('Password must contain at least one uppercase letter')
+    .matches(/[!@#$%^&*(),.?":{}|<>]/)
+    .withMessage('Password must contain at least one special character'),
+], updatePassword);
+
+module.exports = router;
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\src\routes\adminRoutes.js -----
+
+const express = require('express');
+const router = express.Router();
+const { authenticate, authorize } = require('../middleware/authMiddleware');
+const { listUsers, getUserDetails, dashboardStats, addUser } = require('../controllers/adminController');
+const { body } = require('express-validator');
+
+// Apply authentication and role authorization middleware for all routes
+router.use(authenticate);
+router.use(authorize('admin'));
+
+// âœ… Dashboard stats
+router.get('/dashboard', dashboardStats);
+
+// âœ… List users with filters
+router.get('/users', listUsers);
+
+// âœ… Get user details by ID
+router.get('/users/:id', getUserDetails);
+
+// âœ… Add new user with validation
+router.post('/users', [
+  body('name')
+    .isLength({ min: 20, max: 60 })
+    .withMessage('Name must be between 20 and 60 characters'),
+  body('email')
+    .isEmail()
+    .withMessage('Enter a valid email address'),
+  body('password')
+    .isLength({ min: 8, max: 16 })
+    .withMessage('Password must be between 8 and 16 characters')
+    .matches(/[A-Z]/)
+    .withMessage('Password must contain at least one uppercase letter')
+    .matches(/[!@#$%^&*(),.?":{}|<>]/)
+    .withMessage('Password must contain at least one special character'),
+  body('address')
+    .isLength({ max: 400 })
+    .withMessage('Address can be maximum 400 characters'),
+  body('role')
+    .isIn(['admin', 'user', 'store_owner'])
+    .withMessage('Role must be one of admin, user, store_owner')
+], addUser);
+
+module.exports = router;
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\src\routes\storeRoutes.js -----
+
+const express = require('express');
+const router = express.Router();
+const { createStore, listStores } = require('../controllers/storeController');
+const { authenticate, authorize } = require('../middleware/authMiddleware');
+
+// Admin routes
+router.post('/', authenticate, authorize('admin'), createStore);
+
+// Normal user routes
+router.get('/', authenticate, listStores);
+
+module.exports = router;
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\src\middleware\authMiddleware.js -----
+
+const jwt = require('jsonwebtoken');
+const { User } = require('../models');
+
+exports.authenticate = async (req, res, next) => {
+  try {
+    const header = req.headers['authorization'];
+    if (!header) return res.status(401).json({ message: 'Unauthorized' });
+
+    const token = header.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const user = await User.findByPk(decoded.id);
+    if (!user) return res.status(401).json({ message: 'User not found' });
+
+    req.user = user; // attach user to request
+    next();
+  } catch (error) {
+    console.error(error);
+    res.status(401).json({ message: 'Unauthorized' });
+  }
+};
+
+// âœ… Role-based authorization middleware
+exports.authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ message: 'Forbidden: Insufficient permissions' });
+    }
+    next();
+  };
+};
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\src\utils\seedStoreOwner.js -----
+
+const bcrypt = require('bcrypt');
+const { User, Store, sequelize } = require('../models'); // adjust if your index.js exports sequelize
+require('dotenv').config();
+
+async function seedStoreOwner() {
+  try {
+    // Make sure DB is synced (don't drop existing tables)
+    await sequelize.sync({ force: false });
+
+    // 1ï¸âƒ£ Check if store owner exists
+    let owner = await User.findOne({ where: { email: 'owner@example.com' } });
+    if (!owner) {
+      const hashedPassword = await bcrypt.hash('Owner@123', 10);
+      owner = await User.create({
+        name: 'Super Store Owner',
+        email: 'owner@example.com',
+        password: hashedPassword,
+        address: '789 Owner Street, City, Country',
+        role: 'owner', // <-- matches MySQL ENUM
+      });
+      console.log('Store owner created:', owner.name);
+    } else {
+      console.log('Store owner already exists:', owner.name);
+    }
+
+    // 2ï¸âƒ£ Create stores for this owner
+    const storesData = [
+      { name: 'SuperMart', email: 'supermart@example.com', address: '456 Market Street', ownerId: owner.id },
+      { name: 'Tech Gadgets', email: 'techgadgets@example.com', address: '101 Tech Street', ownerId: owner.id },
+      { name: 'Fashion Hub', email: 'fashionhub@example.com', address: '202 Fashion Avenue', ownerId: owner.id },
+    ];
+
+    for (const storeData of storesData) {
+      const existingStore = await Store.findOne({ where: { email: storeData.email } });
+      if (!existingStore) {
+        const store = await Store.create(storeData);
+        console.log('Store created:', store.name);
+      } else {
+        console.log('Store already exists:', existingStore.name);
+      }
+    }
+
+    console.log('Seeding completed successfully!');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error seeding store owner and stores:', error);
+    process.exit(1);
+  }
+}
+
+seedStoreOwner();
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\src\db.js -----
+
+const { Sequelize } = require('sequelize');
+require('dotenv').config();
+
+const sequelize = new Sequelize(
+  process.env.DB_NAME, 
+  process.env.DB_USER, 
+  process.env.DB_PASSWORD, 
+  {
+    host: process.env.DB_HOST || 'localhost',
+    dialect: 'mysql',
+    logging: console.log, // Logs all SQL queries to the console
+  }
+);
+
+// Test connection
+sequelize.authenticate()
+  .then(() => console.log('âœ… Database connection successful'))
+  .catch(err => console.error('âŒ Unable to connect to the database:', err));
+
+module.exports = sequelize;
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\src\app.js -----
+
+const express = require('express');
+const app = express();
+const authRoutes = require('./routes/authRoutes');
+const storeRoutes = require('./routes/storeRoutes');
+const ratingRoutes = require('./routes/ratingRoutes');
+const { authenticate } = require('./middleware/authMiddleware'); // âœ… correct path
+require('dotenv').config();
+const adminRoutes = require('./routes/adminRoutes');
+
+app.use('/api/admin', adminRoutes);
+
+// Middleware
+app.use(express.json());
+
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/stores', storeRoutes);
+app.use('/api/ratings', ratingRoutes);
+
+// Default route
+app.get('/', (req, res) => {
+  res.send('Store Rating API is running.');
+});
+
+// Protected test route
+app.get('/api/protected', authenticate, (req, res) => {
+  res.json({ message: `Welcome ${req.user.name}! This is a protected route.` });
+});
+
+module.exports = app;
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\server.js -----
+
+const app = require('./src/app');
+const sequelize = require('./src/db');
+require('dotenv').config();
+
+const PORT = process.env.PORT || 5000;
+
+sequelize.sync().then(() => {
+  console.log('Database & tables synced!');
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}).catch(err => {
+  console.error('Error syncing database:', err);
+});
+
+
+
+----- FILE: D:\Interview task\store-rating-app\store-rating-backend\.env -----
+
+PORT=5000
+DB_NAME=store_rating_db
+DB_USER=root
+DB_PASSWORD=root
+DB_HOST=localhost
+JWT_SECRET=mansi21
+
+
+
