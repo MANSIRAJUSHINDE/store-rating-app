@@ -4,8 +4,8 @@ const app = express();
 
 const authRoutes = require('./routes/authRoutes');
 const storeRoutes = require('./routes/storeRoutes');
-const ratingRoutes = require('./routes/ratingRoutes');
-const adminRoutes = require('./routes/adminRoutes');
+const ratingRoutes = require('./routes/ratingRoutes'); // optional if you have rating-specific routes
+const adminRoutes = require('./routes/adminRoutes');   // optional if you have admin-specific routes
 const { authenticate } = require('./middleware/authMiddleware');
 
 require('dotenv').config();
@@ -22,12 +22,12 @@ app.use(cors({
 }));
 
 // Routes
-app.use('/api/admin', adminRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/stores', storeRoutes);
-app.use('/api/ratings', ratingRoutes);
+app.use('/api/admin', adminRoutes);   // Admin-only routes
+app.use('/api/auth', authRoutes);     // Signup/Login/Update password
+app.use('/api/stores', storeRoutes);  // Store-related routes
+app.use('/api/ratings', ratingRoutes); // Optional rating routes
 
-// Default route
+// Default root route
 app.get('/', (req, res) => res.send('Store Rating API is running.'));
 
 // Protected test route

@@ -6,13 +6,20 @@ body {
   margin: 0;
   font-family: 'Inter', sans-serif;
   background-color: #f3f4f6; /* fallback light background */
+  overflow-x: auto; /* Allow horizontal scrolling when needed */
 }
 
 #root {
-  max-width: 1280px;
+  max-width: 100%;
+  width: 100%;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 1rem;
+  min-height: 100vh;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: #ffffff;
 }
 
 .logo {
@@ -47,22 +54,53 @@ body {
   padding: 2em;
 }
 
-.read-the-docs {
-  color: #888;
-}
-
-
-tr:hover {
-  background-color: #f3f4f6; /* light gray */
-  transition: background-color 0.2s ease-in-out;
-}
-
-th {
-  cursor: pointer;
-  user-select: none;
+/* Table container for horizontal scroll */
+.table-container {
+  overflow-x: auto;
+  width: 100%;
 }
 
 table {
   border-collapse: separate;
   border-spacing: 0;
+  min-width: 600px;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+/* Hover effect for table rows */
+tr:hover {
+  background-color: #f3f4f6; /* light gray */
+  transition: background-color 0.2s ease-in-out;
+}
+
+/* Clickable headers */
+th {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  #root {
+    padding: 1rem;
+  }
+
+  .card {
+    padding: 1rem;
+  }
+
+  table {
+    font-size: 0.875rem; /* smaller font size for better readability */
+  }
+}
+/* Hide scrollbar for all browsers */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
 }

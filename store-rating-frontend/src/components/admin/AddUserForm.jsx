@@ -11,53 +11,53 @@ const AddUserForm = ({ onUserAdded }) => {
     email: "",
     address: "",
     password: "",
-    role: "normal", // default role
+    role: "normal",
   });
   const [error, setError] = useState("");
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) =>
+    setForm({ ...form, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await API.post("/admin/users", form, { headers: authHeaders() }); // added auth headers
+      await API.post("/admin/users", form, { headers: authHeaders() });
       setForm({ name: "", email: "", address: "", password: "", role: "normal" });
       setError("");
-      onUserAdded(); // refresh the dashboard
+      onUserAdded();
     } catch (err) {
-      console.error("Add user error:", err.response || err);
+      console.error(err.response || err);
       setError(err.response?.data?.message || "Failed to add user");
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="border p-4 rounded shadow mb-4">
-      <h3 className="font-bold mb-2">Add User</h3>
-      {error && <p className="text-red-500">{error}</p>}
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {error && <p className="text-red-500 text-sm">{error}</p>}
 
       <input
         name="name"
         placeholder="Name"
         value={form.name}
         onChange={handleChange}
-        className="border p-2 mb-2 w-full"
         required
+        className="w-full px-4 py-3 border border-gray-300 focus:ring-2 focus:ring-blue-400 focus:outline-none"
       />
       <input
         name="email"
         placeholder="Email"
         value={form.email}
         onChange={handleChange}
-        className="border p-2 mb-2 w-full"
         required
+        className="w-full px-4 py-3 border border-gray-300 focus:ring-2 focus:ring-blue-400 focus:outline-none"
       />
       <input
         name="address"
         placeholder="Address"
         value={form.address}
         onChange={handleChange}
-        className="border p-2 mb-2 w-full"
         required
+        className="w-full px-4 py-3 border border-gray-300 focus:ring-2 focus:ring-blue-400 focus:outline-none"
       />
       <input
         name="password"
@@ -65,21 +65,24 @@ const AddUserForm = ({ onUserAdded }) => {
         placeholder="Password"
         value={form.password}
         onChange={handleChange}
-        className="border p-2 mb-2 w-full"
         required
+        className="w-full px-4 py-3 border border-gray-300 focus:ring-2 focus:ring-blue-400 focus:outline-none"
       />
       <select
         name="role"
         value={form.role}
         onChange={handleChange}
-        className="border p-2 mb-2 w-full"
+        className="w-full px-4 py-3 border border-gray-300 focus:ring-2 focus:ring-blue-400 focus:outline-none"
       >
         <option value="normal">Normal User</option>
         <option value="admin">Admin</option>
         <option value="store_owner">Store Owner</option>
       </select>
 
-      <button type="submit" className="bg-blue-500 text-white p-2 rounded w-full">
+      <button
+        type="submit"
+        className="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold hover:scale-105 transform transition-transform duration-300"
+      >
         Add User
       </button>
     </form>

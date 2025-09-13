@@ -1,12 +1,59 @@
-# React + Vite
+# Store Rating Web Application
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This is a Full Stack web application built for the FullStack Intern Coding Challenge using **React (Vite)** for the frontend and **Express.js** for the backend.
 
-Currently, two official plugins are available:
+Users can sign up, log in, and rate stores based on their roles (Admin, Store Owner, Normal User).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
+## 🚀 How to Run the Project (All steps in one click)
+1️⃣ Clone the repository:
+git clone <your-repository-url>
+cd <your-project-folder>
+2️⃣ Install backend dependencies:
+cd backend
+npm install
 
-## Expanding the ESLint configuration
+3️⃣ Install frontend dependencies:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+cd ../frontend
+npm install
+
+4️⃣ Open two terminals and run the servers:
+
+In the first terminal, start the backend:
+cd backend
+npm run dev
+
+In the second terminal, start the frontend:
+cd ../frontend
+npm run dev
+
+5️⃣ Open the app in your browser:
+
+Visit: http://localhost:3000
+
+---
+
+## 📂 Folder Structure
+
+backend/
+├── controllers/
+├── models/
+├── routes/
+├── middleware/
+├── server.js
+├── package.json
+
+frontend/
+├── src/
+│   ├── components/
+│   ├── context/
+│   ├── pages/
+│   ├── utils/
+├── public/
+├── index.html
+├── vite.config.js
+├── tailwind.config.js
+├── package.json
+
+---

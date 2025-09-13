@@ -1,15 +1,22 @@
+// src/components/common/ProtectedRoute.jsx
 import React, { useContext } from "react";
 import { Navigate } from "react-router-dom";
 import { AuthContext } from "../../context/AuthContext";
 
-const ProtectedRoute = ({ children, roles }) => {
-  const { user } = useContext(AuthContext);
+const ProtectedRoute = ({ roles, children }) => {
+  const { user, loading } = useContext(AuthContext); // ✅ include loading
 
-  // Not logged in → redirect to login
-  if (!user) return <Navigate to="/login" />;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-gray-500 text-lg">Loading...</p>
+      </div>
+    );
+  }
 
-  // Role-based protection → redirect to unauthorized page
-  if (roles && !roles.includes(user.role)) return <Navigate to="/unauthorized" />;
+  if (!user || (roles && !roles.includes(user.role))) {
+    return <Navigate to="/login" />;
+  }
 
   return children;
 };

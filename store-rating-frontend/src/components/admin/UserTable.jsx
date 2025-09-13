@@ -45,68 +45,74 @@ const UserTable = ({ users = [], onViewDetails }) => {
 
   return (
     <div className="mb-8">
-      <h2 className="text-2xl font-bold mb-2">Users</h2>
+      <h2 className="text-2xl font-bold mb-3 text-blue-700">Users</h2>
+      
       <input
         type="text"
         placeholder="Filter users..."
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
-        className="border p-2 mb-2 rounded w-full"
+        className="border border-gray-300 p-2 mb-4 rounded w-full focus:ring-2 focus:ring-blue-400 focus:outline-none transition"
       />
 
-      <table className="min-w-full bg-white border">
-        <thead>
-          <tr>
-            {["name", "email", "address", "role", "averageRating", "actions"].map(
-              (field) => (
-                <th
-                  key={field}
-                  className="border px-4 py-2 cursor-pointer select-none"
-                  onClick={() => field !== "actions" && handleSort(field)}
-                >
-                  {field === "averageRating"
-                    ? "AVERAGE RATING"
-                    : field === "actions"
-                    ? "ACTIONS"
-                    : field.toUpperCase()}
-                  {sortField === field && field !== "actions"
-                    ? sortOrder === "asc"
-                      ? " ↑"
-                      : " ↓"
-                    : ""}
-                </th>
-              )
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {sortedUsers.length === 0 ? (
+      <div className="overflow-x-auto rounded-lg shadow-lg">
+        <table className="min-w-full bg-white divide-y divide-gray-200">
+          <thead className="bg-blue-50">
             <tr>
-              <td colSpan={6} className="text-center py-4 text-gray-500">
-                No users found.
-              </td>
-            </tr>
-          ) : (
-            sortedUsers.map((u) => (
-              <tr key={u.id} className="text-center hover:bg-gray-100">
-                <td className="border px-4 py-2">{u.name}</td>
-                <td className="border px-4 py-2">{u.email}</td>
-                <td className="border px-4 py-2">{u.address}</td>
-                <td className="border px-4 py-2">{u.role}</td>
-                <td className="border px-4 py-2">{u.averageRating ?? 0}</td>
-                <td className="border px-4 py-2">
-                  <button
-                    onClick={() => onViewDetails(u.id)}
-                    className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
+              {["name", "email", "address", "role", "averageRating", "actions"].map(
+                (field) => (
+                  <th
+                    key={field}
+                    className="px-4 py-3 text-left text-xs sm:text-sm md:text-base font-medium text-gray-700 uppercase tracking-wider cursor-pointer select-none"
+                    onClick={() => field !== "actions" && handleSort(field)}
                   >
-                    View Details
-                  </button>
+                    {field === "averageRating"
+                      ? "Average Rating"
+                      : field === "actions"
+                      ? "Actions"
+                      : field.charAt(0).toUpperCase() + field.slice(1)}
+                    {sortField === field && field !== "actions"
+                      ? sortOrder === "asc"
+                        ? " ↑"
+                        : " ↓"
+                      : ""}
+                  </th>
+                )
+              )}
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-100">
+            {sortedUsers.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-4 text-gray-500">
+                  No users found.
                 </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ) : (
+              sortedUsers.map((u) => (
+                <tr
+                  key={u.id}
+                  className="hover:bg-blue-50 transition cursor-pointer text-gray-800"
+                >
+                  <td className="px-4 py-2">{u.name}</td>
+                  <td className="px-4 py-2">{u.email}</td>
+                  <td className="px-4 py-2">{u.address}</td>
+                  <td className="px-4 py-2">{u.role}</td>
+                  <td className="px-4 py-2 text-center">{u.averageRating ?? 0}</td>
+                  <td className="px-4 py-2 text-center">
+                    <button
+                      onClick={() => onViewDetails(u.id)}
+                      className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 transition transform hover:scale-105"
+                    >
+                      View Details
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

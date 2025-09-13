@@ -1,14 +1,15 @@
+// src/pages/AdminDashboard.jsx
 import React, { useContext, useEffect, useState } from "react";
 import { AuthContext } from "../context/AuthContext";
 import axios from "axios";
 import AddUserForm from "../components/admin/AddUserForm";
 import UserTable from "../components/admin/UserTable";
 import StoreTable from "../components/admin/StoreTable";
-import AdminStats from "../components/admin/AdminStats";
 import AddStoreForm from "../components/admin/AddStoreForm";
 import UserDetailsModal from "../components/admin/UserDetailsModal";
 import StoreDetailsModal from "../components/admin/StoreDetailsModal";
-import { FaUsers, FaStore, FaStar } from "react-icons/fa";
+import AdminStats from "../components/admin/AdminStats";
+import Header from "../components/common/Header"; // ✅ Import the reusable Header
 
 const AdminDashboard = () => {
   const { user, logout, authHeaders } = useContext(AuthContext);
@@ -30,25 +31,16 @@ const AdminDashboard = () => {
 
     try {
       const headers = authHeaders();
-      const statsRes = await axios.get(
-        "http://localhost:5000/api/admin/dashboard",
-        { headers }
-      );
+      const statsRes = await axios.get("http://localhost:5000/api/admin/dashboard", { headers });
       setStats(statsRes.data);
 
-      const usersRes = await axios.get(
-        "http://localhost:5000/api/admin/users",
-        { headers }
-      );
+      const usersRes = await axios.get("http://localhost:5000/api/admin/users", { headers });
       setUsers(usersRes.data.users || []);
 
-      const storesRes = await axios.get(
-        "http://localhost:5000/api/admin/stores",
-        { headers }
-      );
+      const storesRes = await axios.get("http://localhost:5000/api/admin/stores", { headers });
       setStores(storesRes.data.stores || []);
     } catch (err) {
-      console.error("Error fetching admin data:", err.response || err);
+      console.error(err.response || err);
       if (err.response?.status === 401) {
         logout();
         setError("Session expired. Please login again.");
@@ -83,111 +75,105 @@ const AdminDashboard = () => {
         <p>{error}</p>
         <button
           onClick={fetchAdminData}
-          className="mt-4 bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 transition"
+          className="mt-4 bg-blue-600 text-white px-4 py-2 rounded transition"
         >
           Retry
         </button>
       </div>
     );
-
   return (
-    <div className="p-6 md:p-10 space-y-8 max-w-7xl mx-auto bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-        <h1 className="text-3xl font-bold text-gray-800">Admin Dashboard</h1>
-        <div className="flex gap-2 items-center">
-          <p className="text-gray-700 font-medium">
-            Welcome, {user?.name} ({user?.role})
-          </p>
-          <button
-            onClick={logout}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded shadow transition flex items-center gap-2"
-          >
-            Logout
-          </button>
+    <div className="min-h-screen w-full bg-gray-50">
+
+      {/* ✅ Sticky full-width header */}
+      <Header title="Admin Dashboard" user={user} logout={logout} />
+
+      {/* ✅ Main content with responsive padding, offset for sticky header */}
+      <div className="pt-20 px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12">
+
+        {/* Stats Section */}
+        {stats && (
+          <div className="mb-8">
+            <AdminStats stats={stats} />
+          </div>
+        )}
+
+        {/* Users Section */}
+        <div className="mb-8">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+            <h2 className="text-xl sm:text-2xl font-bold text-indigo-700 truncate">
+              Users
+            </h2>
+            {!showAddUser && (
+              <button
+                onClick={() => setShowAddUser(true)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded transition text-sm sm:text-base"
+              >
+                Add User
+              </button>
+            )}
+          </div>
+          <UserTable users={users} onViewDetails={(id) => setSelectedUserId(id)} />
         </div>
+
+        {/* Stores Section */}
+        <div className="mb-8">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+            <h2 className="text-xl sm:text-2xl font-bold text-indigo-700 truncate">
+              Stores
+            </h2>
+            {!showAddStore && (
+              <button
+                onClick={() => setShowAddStore(true)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded transition text-sm sm:text-base"
+              >
+                Add Store
+              </button>
+            )}
+          </div>
+          <StoreTable stores={stores} onViewDetails={(id) => setSelectedStoreId(id)} />
+        </div>
+
       </div>
 
-      {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div className="flex items-center p-4 bg-gradient-to-r from-blue-100 to-blue-200 rounded-xl shadow hover:shadow-lg transition">
-            <div className="bg-blue-200 p-3 rounded-full">
-              <FaUsers className="text-blue-700 text-2xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-gray-700 font-medium">Total Users</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.totalUsers}</p>
-            </div>
-          </div>
-          <div className="flex items-center p-4 bg-gradient-to-r from-green-100 to-green-200 rounded-xl shadow hover:shadow-lg transition">
-            <div className="bg-green-200 p-3 rounded-full">
-              <FaStore className="text-green-700 text-2xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-gray-700 font-medium">Total Stores</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.totalStores}</p>
-            </div>
-          </div>
-          <div className="flex items-center p-4 bg-gradient-to-r from-yellow-100 to-yellow-200 rounded-xl shadow hover:shadow-lg transition">
-            <div className="bg-yellow-200 p-3 rounded-full">
-              <FaStar className="text-yellow-700 text-2xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-gray-700 font-medium">Total Ratings</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.totalRatings}</p>
-            </div>
+      {/* ✅ Add User Modal */}
+      {showAddUser && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-30">
+          <div className="w-full max-w-lg p-6 relative bg-white border border-gray-300">
+            <button
+              onClick={() => setShowAddUser(false)}
+              className="absolute left-3 top-3 text-2xl text-indigo-600 hover:text-indigo-800 transition"
+            >
+              ✖
+            </button>
+            <AddUserForm onUserAdded={handleUserAdded} />
           </div>
         </div>
       )}
 
-      {/* Users Section */}
-      <div className="space-y-4 bg-white rounded-xl shadow p-6">
-        <div className="flex justify-between items-center mb-2">
-          <h2 className="text-2xl font-bold text-gray-800">Users</h2>
-          {!showAddUser && (
+      {/* ✅ Add Store Modal */}
+      {showAddStore && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-30">
+          <div className="w-full max-w-lg p-6 relative bg-white border border-gray-300">
             <button
-              onClick={() => setShowAddUser(true)}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded shadow transition"
+              onClick={() => setShowAddStore(false)}
+              className="absolute left-3 top-3 text-2xl text-indigo-600 hover:text-indigo-800 transition"
             >
-              Add User
+              ✖
             </button>
-          )}
+            <AddStoreForm refresh={handleStoreAdded} />
+          </div>
         </div>
-        {showAddUser && <AddUserForm onUserAdded={handleUserAdded} />}
-        <UserTable
-          users={users}
-          onViewDetails={(id) => setSelectedUserId(id)}
-        />
-      </div>
+      )}
 
-      {/* Stores Section */}
-      <div className="space-y-4 bg-white rounded-xl shadow p-6">
-        <div className="flex justify-between items-center mb-2">
-          <h2 className="text-2xl font-bold text-gray-800">Stores</h2>
-          {!showAddStore && (
-            <button
-              onClick={() => setShowAddStore(true)}
-              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded shadow transition"
-            >
-              Add Store
-            </button>
-          )}
-        </div>
-        {showAddStore && <AddStoreForm refresh={handleStoreAdded} />}
-        <StoreTable
-          stores={stores}
-          onViewDetails={(id) => setSelectedStoreId(id)}
-        />
-      </div>
-
-      {/* Modals */}
+      {/* ✅ User Details Modal */}
       {selectedUserId && (
         <UserDetailsModal
           userId={selectedUserId}
           onClose={() => setSelectedUserId(null)}
         />
       )}
+
+      {/* ✅ Store Details Modal */}
       {selectedStoreId && (
         <StoreDetailsModal
           storeId={selectedStoreId}
@@ -196,6 +182,7 @@ const AdminDashboard = () => {
       )}
     </div>
   );
+
 };
 
 export default AdminDashboard;

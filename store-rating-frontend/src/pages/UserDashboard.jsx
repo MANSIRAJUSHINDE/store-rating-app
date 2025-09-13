@@ -1,66 +1,44 @@
-// src/pages/UserDashboard.jsx
-import React, { useEffect, useState, useContext } from "react";
-import API from "../services/api";
+import React, { useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
-import ProtectedRoute from "../components/common/ProtectedRoute";
-import RateStoreForm from "../components/user/RateStoreForm";
+import Header from "../components/common/Header";  // ✅ Import the header
+import StoreList from "../components/user/StoreList";
+import UpdatePasswordForm from "../components/common/UpdatePasswordForm";
+import UserProfile from "../components/common/UserProfile";
+
+const DashboardSection = ({ title, children }) => (
+  <section className="mb-8 p-4 bg-gradient-to-r from-blue-100 via-indigo-50 to-purple-100 rounded-xl shadow-sm">
+    <h2 className="text-lg xs:text-xl sm:text-2xl font-bold mb-4 text-indigo-700 border-b border-indigo-300 pb-2">{title}</h2>
+    {children}
+  </section>
+);
 
 const UserDashboard = () => {
   const { user, logout } = useContext(AuthContext);
-  const [stores, setStores] = useState([]);
-  const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    const fetchStores = async () => {
-      try {
-        const res = await API.get(`/stores?search=${search}`);
-        setStores(res.data);
-      } catch (err) {
-        console.error("Failed to fetch stores", err);
-      }
-    };
-    fetchStores();
-  }, [search]);
+    return (
+    <div className="min-h-screen w-full bg-gray-50">
 
-  return (
-    <ProtectedRoute roles={["user"]}>
-      <div className="p-8">
-        <h1 className="text-3xl font-bold mb-6">Welcome, {user.name}</h1>
-        <button
-          onClick={logout}
-          className="mb-6 bg-red-500 text-white p-2 rounded"
-        >
-          Logout
-        </button>
+      {/* ✅ Sticky full-width header */}
+      <Header title="User Dashboard" user={user} logout={logout} />
 
-        {/* Search stores */}
-        <input
-          type="text"
-          placeholder="Search stores by name or address"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="border p-2 rounded w-full mb-6"
-        />
+      {/* ✅ Main content with responsive padding and offset for sticky header */}
+      <div className="pt-20 px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12">
 
-        {/* Stores list */}
-        <div className="space-y-4">
-          {stores.map((store) => (
-            <div
-              key={store.id}
-              className="border p-4 rounded shadow flex justify-between items-center"
-            >
-              <div>
-                <p className="font-bold">{store.name}</p>
-                <p>{store.address}</p>
-                <p>Average Rating: {store.averageRating || 0}</p>
-              </div>
-              <RateStoreForm storeId={store.id} userRating={store.userRating} />
-            </div>
-          ))}
+        {/* Stores Section */}
+        <div className="mb-8">
+          <div className="flex flex-col ">
+            <h2 className="text-xl sm:text-2xl font-bold text-indigo-700 truncate">
+              Stores
+            </h2>
+          </div>
+          <StoreList />
         </div>
+
+
       </div>
-    </ProtectedRoute>
+    </div>
   );
+
 };
 
 export default UserDashboard;

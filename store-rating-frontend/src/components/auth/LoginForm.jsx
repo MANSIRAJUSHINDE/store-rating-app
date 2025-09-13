@@ -26,36 +26,45 @@ const LoginForm = () => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+    <div>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {error && <p className="text-red-500 text-sm">{error}</p>}
 
-      <input
-        type="email"
-        name="email"
-        placeholder="Email"
-        value={formData.email}
-        onChange={handleChange}
-        required
-        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:outline-none"
-      />
+        <input
+          type="email"
+          name="email"
+          placeholder="Email"
+          value={formData.email}
+          onChange={handleChange}
+          required
+          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:outline-none"
+        />
 
-      <input
-        type="password"
-        name="password"
-        placeholder="Password"
-        value={formData.password}
-        onChange={handleChange}
-        required
-        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:outline-none"
-      /> Admin@123
-      <button
-        type="submit"
-        className="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold rounded-xl hover:scale-105 transform transition-transform duration-300"
-      >
-        Login 
-        
-      </button>
-    </form>
+        <input
+          type="password"
+          name="password"
+          placeholder="Password"
+          value={formData.password}
+          onChange={handleChange}
+          required
+          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:outline-none"
+        /> 
+
+        <button
+          type="submit"
+          className="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold rounded-xl hover:scale-105 transform transition-transform duration-300"
+        >
+          Login 
+        </button>
+      </form>
+
+      {/* Test credentials as small text */}
+      <div className="mt-4 text-xs text-gray-600">
+        <p>Admin: admin@example.com / Admin@123</p>
+        <p>Store Owner: owner@example.com / Owner@123</p>
+        <p>Normal User: user1@gmail.com / User@123</p>
+      </div>
+    </div>
   );
 };
 
