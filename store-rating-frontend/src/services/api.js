@@ -1,7 +1,8 @@
 import axios from 'axios';
 
+// Use VITE_BACKEND_URL from environment variables
 const API = axios.create({
-  baseURL: 'http://localhost:5000/api', // backend base URL
+  baseURL: `${import.meta.env.VITE_BACKEND_URL}/api`, // backend base URL
 });
 
 // helper to set token in headers
