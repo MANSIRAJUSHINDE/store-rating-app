@@ -1,20 +1,8 @@
-const { Sequelize } = require('sequelize');
-const UserModel = require('./User');
-const StoreModel = require('./Store');
-const RatingModel = require('./Rating');
-require('dotenv').config();
+const sequelize = require("../config/database");
 
-// Initialize Sequelize
-const sequelize = new Sequelize(
-  process.env.DB_NAME,
-  process.env.DB_USER,
-  process.env.DB_PASSWORD,
-  {
-    host: process.env.DB_HOST,
-    dialect: 'mysql',
-    logging: false
-  }
-);
+const UserModel = require("./User");
+const StoreModel = require("./Store");
+const RatingModel = require("./Rating");
 
 // Initialize models
 const User = UserModel(sequelize);
@@ -26,5 +14,10 @@ User.associate({ Store, Rating });
 Store.associate({ User, Rating });
 Rating.associate({ User, Store });
 
-// Export models and sequelize instance
-module.exports = { sequelize, User, Store, Rating };
+// Export everything
+module.exports = {
+  sequelize,
+  User,
+  Store,
+  Rating,
+};

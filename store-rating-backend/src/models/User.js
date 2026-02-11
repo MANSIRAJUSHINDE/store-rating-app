@@ -1,25 +1,44 @@
-const { Model, DataTypes } = require('sequelize');
+const { Model, DataTypes } = require("sequelize");
+const bcrypt = require("bcryptjs");
 
 class User extends Model {
   static associate(models) {
-    this.hasMany(models.Store, { foreignKey: 'ownerId', as: 'ownedStores' });
-    this.hasMany(models.Rating, { foreignKey: 'userId', as: 'ratings' });
+    this.hasMany(models.Store, {
+      foreignKey: "ownerId",
+      as: "ownedStores",
+      onDelete: "CASCADE",
+    });
+
+    this.hasMany(models.Rating, {
+      foreignKey: "userId",
+      as: "ratings",
+      onDelete: "CASCADE",
+    });
+  }
+
+  comparePassword(password) {
+    return bcrypt.compare(password, this.password);
   }
 }
 
 module.exports = (sequelize) => {
   User.init(
     {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
       name: {
         type: DataTypes.STRING(60),
         allowNull: false,
-        validate: { len: [3, 60] } // Admin requirement: 3-60 characters
+        validate: { len: [3, 60] },
       },
       email: {
         type: DataTypes.STRING(255),
         allowNull: false,
         unique: true,
-        validate: { isEmail: true }
+        validate: { isEmail: true },
       },
       password: {
         type: DataTypes.STRING(255),
@@ -28,19 +47,28 @@ module.exports = (sequelize) => {
       address: {
         type: DataTypes.STRING(400),
         allowNull: false,
-        validate: { len: [0, 400] }
       },
       role: {
-        type: DataTypes.ENUM('admin', 'normal', 'store_owner'),
+        type: DataTypes.ENUM("admin", "normal", "store_owner"),
         allowNull: false,
-        defaultValue: 'normal'
+        defaultValue: "normal",
       },
     },
     {
       sequelize,
-      modelName: 'User',
-      tableName: 'users',
-      timestamps: true
+      modelName: "User",
+      tableName: "users",
+      timestamps: true,
+      hooks: {
+        beforeCreate: async (user) => {
+          user.password = await bcrypt.hash(user.password, 10);
+        },
+        beforeUpdate: async (user) => {
+          if (user.changed("password")) {
+            user.password = await bcrypt.hash(user.password, 10);
+          }
+        },
+      },
     }
   );
 
