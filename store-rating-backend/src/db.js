@@ -12,13 +12,13 @@ const sequelize = new Sequelize(process.env.DATABASE_URL, {
   },
 });
 
-// Test connection
+// Optional: test connection once
 (async () => {
   try {
     await sequelize.authenticate();
     console.log("✅ Supabase PostgreSQL connected successfully");
   } catch (error) {
-    console.error("❌ Unable to connect to Supabase DB:", error);
+    console.error("❌ Unable to connect to Supabase DB:", error.message);
   }
 })();
 
