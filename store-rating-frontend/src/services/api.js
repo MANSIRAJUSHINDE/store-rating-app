@@ -1,16 +1,16 @@
-import axios from 'axios';
+import axios from "axios";
 
-// Use VITE_BACKEND_URL from environment variables
+// Create axios instance
 const API = axios.create({
-  baseURL: `${import.meta.env.VITE_BACKEND_URL}/api`, // backend base URL
+  baseURL: `${import.meta.env.VITE_BACKEND_URL}/api`,
 });
 
-// helper to set token in headers
+// Helper to set token in headers
 export const setToken = (token) => {
   if (token) {
-    API.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    API.defaults.headers.common["Authorization"] = `Bearer ${token}`;
   } else {
-    delete API.defaults.headers.common['Authorization'];
+    delete API.defaults.headers.common["Authorization"];
   }
 };
 
