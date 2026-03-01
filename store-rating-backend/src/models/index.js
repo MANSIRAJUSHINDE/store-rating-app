@@ -9,15 +9,9 @@ const User = UserModel(sequelize);
 const Store = StoreModel(sequelize);
 const Rating = RatingModel(sequelize);
 
-// Set up associations
+// Associations
 User.associate({ Store, Rating });
 Store.associate({ User, Rating });
 Rating.associate({ User, Store });
 
-// Export everything
-module.exports = {
-  sequelize,
-  User,
-  Store,
-  Rating,
-};
+module.exports = { sequelize, User, Store, Rating };

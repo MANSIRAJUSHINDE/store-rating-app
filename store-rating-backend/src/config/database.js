@@ -7,18 +7,18 @@ const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialectOptions: {
     ssl: {
       require: true,
-      rejectUnauthorized: false, // required for Supabase
+      rejectUnauthorized: false, // required for Railway / Supabase
     },
   },
 });
 
-// Optional: test connection once
+// Test connection
 (async () => {
   try {
     await sequelize.authenticate();
-    console.log("✅ Supabase PostgreSQL connected successfully");
-  } catch (error) {
-    console.error("❌ Unable to connect to Supabase DB:", error.message);
+    console.log("✅ PostgreSQL connected successfully");
+  } catch (err) {
+    console.error("❌ DB connection error:", err.message);
   }
 })();
 
