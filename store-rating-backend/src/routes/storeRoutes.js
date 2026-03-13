@@ -13,6 +13,14 @@ const {
 // ===================
 // Admin routes
 // ===================
+// Add this right before line 16
+const handlers = [yourMiddleware1, yourMiddleware2, yourHandler];
+handlers.forEach((h, index) => {
+  if (typeof h !== 'function') {
+    console.error(`ERROR: Handler at index ${index} is not a function! It is:`, h);
+  }
+});
+
 router.post(
   '/',
   authenticate,
