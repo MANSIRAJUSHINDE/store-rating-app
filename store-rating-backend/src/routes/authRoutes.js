@@ -4,6 +4,19 @@ const { signup, login, updatePassword, getMe } = require('../controllers/authCon
 const { authenticate } = require('../middleware/authMiddleware');
 const { body } = require('express-validator');
 
+// src/routes/authRoutes.js
+
+const authController = require('../controllers/authController');
+
+// Debugging: Log the type of each function
+console.log("DEBUG: Are these functions?", {
+  signup: typeof authController.signup,
+  login: typeof authController.login,
+  updatePassword: typeof authController.updatePassword,
+  getMe: typeof authController.getMe
+});
+
+// If any of these print 'undefined', THAT is the function you need to fix in the controller.
 // Signup
 router.post(
   '/signup',
