@@ -3,10 +3,13 @@ const { body } = require('express-validator');
 
 exports.signupValidator = [
   body('name')
-    .isLength({ min: 20, max: 60 })
-    .withMessage('Name must be between 20 and 60 characters'),
+    .trim() // Added to remove accidental whitespace
+    .isLength({ min: 2, max: 60 }) // Changed min to 2 for better user experience
+    .withMessage('Name must be between 2 and 60 characters'),
   body('email')
+    .trim()
     .isEmail()
+    .normalizeEmail() // Normalizes email to lowercase (e.g., User@Email.com -> user@email.com)
     .withMessage('Enter a valid email address'),
   body('password')
     .isLength({ min: 8, max: 16 })
@@ -16,13 +19,16 @@ exports.signupValidator = [
     .matches(/[!@#$%^&*(),.?":{}|<>]/)
     .withMessage('Password must contain at least one special character'),
   body('address')
+    .trim()
     .isLength({ max: 400 })
     .withMessage('Address can be maximum 400 characters'),
 ];
 
 exports.loginValidator = [
   body('email')
+    .trim()
     .isEmail()
+    .normalizeEmail()
     .withMessage('Enter a valid email address'),
   body('password')
     .notEmpty()

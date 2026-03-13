@@ -17,13 +17,15 @@ const { authenticate } = require("./middleware/authMiddleware");
 // Middleware
 app.use(express.json());
 
-// ✅ CORS for frontend
+// ✅ Enhanced CORS Configuration
+const allowedOrigins = [
+  "http://localhost:5173", 
+  process.env.FRONTEND_URL // Ensure this is set in your production dashboard
+].filter(Boolean); // Filters out undefined if ENV is missing
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      process.env.FRONTEND_URL, // Vercel frontend
-    ],
+    origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -45,6 +47,15 @@ app.get("/", (req, res) => {
 app.get("/api/protected", authenticate, (req, res) => {
   res.json({
     message: `Welcome ${req.user.name}! This is a protected route.`,
+  });
+});
+
+// ✅ Global Error Handler (Crucial for Production)
+app.use((err, req, res, next) => {
+  console.error("❌ Global Error:", err.stack);
+  res.status(500).json({ 
+    message: "Something went wrong on the server!",
+    error: process.env.NODE_ENV === 'development' ? err.message : "Internal Server Error"
   });
 });
 

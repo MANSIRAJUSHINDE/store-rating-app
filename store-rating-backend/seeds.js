@@ -1,18 +1,22 @@
 require('dotenv').config();
 const bcrypt = require('bcrypt');
+// Change: Ensure the path matches your actual folder structure exactly
+// Linux servers are case-sensitive, so './src/models' must match the folder name
 const { sequelize, User, Store, Rating } = require('./src/models');
 
 const seedDatabase = async () => {
   try {
+    console.log('⏳ Starting database seeding...');
+
     // ✅ Ensure DB tables exist
+    // Changed: force: false is safer for production so you don't delete real data by mistake
     await sequelize.sync({ force: false });
 
-    // --------------------------
     // 1️⃣ Create Admin
-    // --------------------------
     let admin = await User.findOne({ where: { email: 'admin@example.com' } });
     if (!admin) {
-      const hashedPassword = await bcrypt.hash('Admin@123', 10);
+      // Best Practice: In a real app, use an Env variable for the initial admin password
+      const hashedPassword = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'Admin@123', 10);
       admin = await User.create({
         name: 'Admin User',
         email: 'admin@example.com',
@@ -20,14 +24,12 @@ const seedDatabase = async () => {
         address: '123 Admin Street, City, Country',
         role: 'admin',
       });
-      console.log('Admin created:', admin.name);
+      console.log('✅ Admin created:', admin.name);
     } else {
-      console.log('Admin already exists:', admin.name);
+      console.log('ℹ️ Admin already exists:', admin.name);
     }
 
-    // --------------------------
     // 2️⃣ Create Store Owner
-    // --------------------------
     let owner = await User.findOne({ where: { email: 'owner@example.com' } });
     if (!owner) {
       const hashedPassword = await bcrypt.hash('Owner@123', 10);
@@ -38,14 +40,12 @@ const seedDatabase = async () => {
         address: '456 Owner Street, City, Country',
         role: 'store_owner',
       });
-      console.log('Store owner created:', owner.name);
+      console.log('✅ Store owner created:', owner.name);
     } else {
-      console.log('Store owner already exists:', owner.name);
+      console.log('ℹ️ Store owner already exists:', owner.name);
     }
 
-    // --------------------------
-    // 3️⃣ Create Stores for Store Owner
-    // --------------------------
+    // 3️⃣ Create Stores
     const storesData = [
       {
         name: 'Tech Gadgets',
@@ -65,16 +65,14 @@ const seedDatabase = async () => {
       const existingStore = await Store.findOne({ where: { email: storeData.email } });
       if (!existingStore) {
         await Store.create(storeData);
-        console.log('Store created:', storeData.name);
+        console.log('✅ Store created:', storeData.name);
       } else {
-        console.log('Store already exists:', storeData.name);
+        console.log('ℹ️ Store already exists:', storeData.name);
       }
     }
 
-    // --------------------------
     // 4️⃣ Create Sample Ratings
-    // --------------------------
-    const users = [admin, owner]; // For simplicity, admin and owner rate stores
+    const users = [admin, owner]; 
     const stores = await Store.findAll();
 
     for (const store of stores) {
@@ -86,14 +84,14 @@ const seedDatabase = async () => {
           await Rating.create({
             userId: user.id,
             storeId: store.id,
-            rating: Math.floor(Math.random() * 5) + 1, // Random 1-5
+            rating: Math.floor(Math.random() * 5) + 1, 
           });
-          console.log(`Rating created by ${user.name} for store ${store.name}`);
+          console.log(`⭐ Rating created by ${user.name} for ${store.name}`);
         }
       }
     }
 
-    console.log('✅ Database seeding completed successfully!');
+    console.log('🚀 Database seeding completed successfully!');
     process.exit(0);
   } catch (error) {
     console.error('❌ Error seeding database:', error);
