@@ -1,7 +1,6 @@
 const { Sequelize } = require("sequelize");
 require("dotenv").config();
 
-// Create Sequelize instance for MySQL
 const sequelize = new Sequelize(
   process.env.DB_NAME, 
   process.env.DB_USER, 
@@ -10,17 +9,13 @@ const sequelize = new Sequelize(
     host: process.env.DB_HOST,
     port: process.env.DB_PORT || 3306,
     dialect: "mysql",
-    logging: false, // Set to console.log if you want to see SQL queries during debugging
-    
-    // CRITICAL FOR DEPLOYMENT:
+    logging: false, 
     dialectOptions: {
       ssl: {
         require: true,
-        rejectUnauthorized: false, // This allows connecting to cloud DBs without local certificates
+        rejectUnauthorized: false, 
       },
     },
-    
-    // Connection Pool settings (Helps manage performance on free/low-tier hosting)
     pool: {
       max: 5,
       min: 0,
@@ -29,15 +24,5 @@ const sequelize = new Sequelize(
     }
   }
 );
-
-// Test connection
-(async () => {
-  try {
-    await sequelize.authenticate();
-    console.log("✅ Cloud MySQL connected successfully");
-  } catch (err) {
-    console.error("❌ DB connection error:", err.message);
-  }
-})();
 
 module.exports = sequelize;
