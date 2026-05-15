@@ -1,11 +1,10 @@
-// src/components/admin/StoreDetailsModal.jsx
 import React, { useEffect, useState, useContext } from "react";
 import { AuthContext } from "../../context/AuthContext";
-import axios from "axios";
+import API from "../../services/api"; // Updated import
 import { FaStar, FaStore, FaUser } from "react-icons/fa";
 
 const StoreDetailsModal = ({ storeId, onClose }) => {
-  const { authHeaders, logout } = useContext(AuthContext);
+  const { logout } = useContext(AuthContext);
   const [store, setStore] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -17,8 +16,8 @@ const StoreDetailsModal = ({ storeId, onClose }) => {
       setError("");
 
       try {
-        const headers = authHeaders();
-        const res = await axios.get(`http://localhost:5000/api/admin/stores/${storeId}`, { headers });
+        // Using the API instance simplifies the URL and headers
+        const res = await API.get(`/admin/stores/${storeId}`);
         setStore(res.data);
       } catch (err) {
         if (err.response?.status === 401) {
@@ -33,12 +32,20 @@ const StoreDetailsModal = ({ storeId, onClose }) => {
     };
 
     fetchStoreDetails();
-  }, [storeId, authHeaders, logout]);
+  }, [storeId, logout]); // Removed authHeaders dependency as API interceptor handles it
 
   if (!storeId) return null;
 
+  // Function to handle clicking outside the modal to close it
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50 p-4">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50 p-4"
+      onClick={handleBackdropClick}
+    >
       <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200">
         
         {/* Header */}
@@ -55,27 +62,47 @@ const StoreDetailsModal = ({ storeId, onClose }) => {
         </div>
 
         {loading ? (
-          <div className="p-6 text-center text-gray-600">Loading...</div>
+          <div className="p-10 flex flex-col items-center justify-center space-y-3">
+             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+             <p className="text-gray-600">Loading details...</p>
+          </div>
         ) : error ? (
-          <div className="p-6 text-center text-red-500 font-semibold">{error}</div>
+          <div className="p-6 text-center">
+            <p className="text-red-500 font-semibold mb-4">{error}</p>
+            <button onClick={onClose} className="text-indigo-600 underline">Close</button>
+          </div>
         ) : (
           <div className="p-6 space-y-5">
             {/* Store Info Card */}
-            <div className="bg-white rounded-lg shadow-md p-4 space-y-2 border border-gray-100 hover:shadow-lg transition-shadow">
-              <p className="text-gray-700 flex items-center gap-2"><FaStore className="text-indigo-500" /> <span className="font-semibold">Name:</span> <span className="text-gray-800">{store.name}</span></p>
-              <p className="text-gray-700 flex items-center gap-2"><FaUser className="text-green-500" /> <span className="font-semibold">Owner ID:</span> <span className="text-gray-800">{store.ownerId}</span></p>
-              <p className="text-gray-700"><span className="font-semibold">Email:</span> <span className="text-gray-800">{store.email}</span></p>
-              <p className="text-gray-700"><span className="font-semibold">Address:</span> <span className="text-gray-800">{store.address}</span></p>
-              <p className="text-gray-700 flex items-center gap-2"><FaStar className="text-yellow-400" /> <span className="font-semibold">Average Rating:</span> <span className="text-yellow-500 font-bold">{store.averageRating ?? 0}</span></p>
+            <div className="bg-white rounded-lg shadow-md p-4 space-y-3 border border-gray-100 hover:shadow-lg transition-shadow">
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-gray-500 text-sm">Store Name</span>
+                <span className="font-semibold text-gray-800 text-right">{store.name}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-gray-500 text-sm">Owner Email</span>
+                <span className="text-gray-800 text-right">{store.email}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-gray-500 text-sm">Location</span>
+                <span className="text-gray-800 text-right italic">{store.address}</span>
+              </div>
+              <div className="flex justify-between items-center pt-2">
+                <span className="text-gray-500 text-sm">Overall Rating</span>
+                <div className="flex items-center gap-1">
+                  <FaStar className="text-yellow-400" />
+                  <span className="text-indigo-600 font-bold text-lg">{store.averageRating?.toFixed(1) ?? "0.0"}</span>
+                </div>
+              </div>
             </div>
 
             {/* Bottom Close Button */}
             <div className="text-center">
               <button
                 onClick={onClose}
-                className="px-6 py-2 bg-gray-300 hover:bg-gray-400 rounded-lg font-semibold transition-colors"
+                className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-all border border-gray-200"
               >
-                Close
+                Done
               </button>
             </div>
           </div>
