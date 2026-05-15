@@ -1,9 +1,14 @@
-const bcrypt = require("bcrypt");
+// src/utils/seedStoreOwner.js
+const bcrypt = require("bcryptjs"); // Changed to bcryptjs
 const { User, Store, sequelize } = require("../models");
 require("dotenv").config();
 
 async function seedStoreOwner() {
   try {
+    // Connect to DB
+    await sequelize.authenticate();
+    console.log("Connection established for seeding...");
+    
     await sequelize.sync({ force: false });
 
     let owner = await User.findOne({ where: { email: "owner@example.com" } });
@@ -16,9 +21,9 @@ async function seedStoreOwner() {
         address: "789 Owner Street, City, Country",
         role: "store_owner",
       });
-      console.log("Store owner created:", owner.name);
+      console.log("✅ Store owner created:", owner.name);
     } else {
-      console.log("Store owner already exists:", owner.name);
+      console.log("ℹ️ Store owner already exists:", owner.name);
     }
 
     const storesData = [
@@ -31,16 +36,16 @@ async function seedStoreOwner() {
       const existingStore = await Store.findOne({ where: { email: storeData.email } });
       if (!existingStore) {
         const store = await Store.create(storeData);
-        console.log("Store created:", store.name);
+        console.log("✅ Store created:", store.name);
       } else {
-        console.log("Store already exists:", existingStore.name);
+        console.log("ℹ️ Store already exists:", existingStore.name);
       }
     }
 
-    console.log("✅ Seeding completed!");
+    console.log("🏁 Seeding completed!");
     process.exit(0);
   } catch (err) {
-    console.error("Seeding error:", err);
+    console.error("❌ Seeding error:", err);
     process.exit(1);
   }
 }

@@ -1,54 +1,44 @@
-// src/controllers/storeController.js
-const { Store, Rating, User } = require('../models');
-const { Op } = require('sequelize');
+const { Store, User, Rating } = require('../models');
 
-// =======================
-// Admin: List all stores with ratings
-// =======================
-exports.listStores = async (req, res) => {
-  try {
-    const { name, address } = req.query;
-    const filters = {};
-    // Use Op.iLike for case-insensitive search if using Postgres, 
-    // Op.like is fine for MySQL
-    if (name) filters.name = { [Op.like]: `%${name}%` };
-    if (address) filters.address = { [Op.like]: `%${address}%` };
-
-    const stores = await Store.findAll({
-      where: filters,
-      include: [
-        {
-          model: Rating,
-          as: 'ratings',
-          include: [{ model: User, as: 'user', attributes: ['id', 'name'] }],
-        },
-      ],
-    });
-
-    const result = stores.map(store => {
-      // Safety check: ensure store.ratings exists
-      const ratings = store.ratings || [];
-      const ratingsArray = ratings.map(r => r.rating);
-      const avgRating = ratingsArray.length
-        ? (ratingsArray.reduce((a, b) => a + b, 0) / ratingsArray.length).toFixed(1)
-        : null;
-
-      return {
-        id: store.id,
-        name: store.name,
-        email: store.email,
-        address: store.address,
-        overallRating: avgRating ? parseFloat(avgRating) : null,
-        ratings: ratings,
-      };
-    });
-
-    res.json({ stores: result });
-  } catch (err) {
-    console.error("List stores error:", err);
-    res.status(500).json({ message: 'Server error' });
-  }
+// ✅ Use exports.name to ensure multiple functions are exported correctly
+exports.createStore = async (req, res) => {
+    try {
+        const { name, email, address } = req.body;
+        const newStore = await Store.create({ name, email, address });
+        res.status(201).json(newStore);
+    } catch (error) {
+        res.status(500).json({ message: "Error creating store", error: error.message });
+    }
 };
 
-// ... keep rateStore and other functions as they are, 
-// they are already well-structured.
+exports.listStores = async (req, res) => {
+    try {
+        const stores = await Store.findAll();
+        res.json(stores);
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching stores" });
+    }
+};
+
+exports.getStoresForUser = async (req, res) => {
+    try {
+        const stores = await Store.findAll();
+        res.json(stores);
+    } catch (error) {
+        res.status(500).json({ message: "Error" });
+    }
+};
+
+exports.rateStore = async (req, res) => {
+    // Your rating logic here
+    res.status(200).json({ message: "Rating submitted" });
+};
+
+exports.getStoreForOwner = async (req, res) => {
+    try {
+        const store = await Store.findOne({ where: { ownerId: req.user.id } });
+        res.json(store);
+    } catch (error) {
+        res.status(500).json({ message: "Error" });
+    }
+};

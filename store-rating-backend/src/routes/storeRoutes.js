@@ -2,34 +2,25 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/authMiddleware');
 const { body } = require('express-validator');
-const {
-  createStore,
-  listStores,
-  getStoresForUser,
-  rateStore,
-  getStoreForOwner,
-} = require('../controllers/storeController');
+const storeController = require('../controllers/storeController');
 
-// Admin routes
+// Log this to your console to debug live
+console.log('DEBUG: StoreController contents:', Object.keys(storeController));
+
 router.post(
   '/',
   authenticate,
   authorize('admin'),
   [
-    body('name').isLength({ min: 3, max: 60 }),
+    body('name').isLength({ min: 3 }),
     body('email').isEmail(),
-    body('address').isLength({ max: 400 }),
   ],
-  createStore
+  storeController.createStore // Use the direct dot notation
 );
 
-router.get('/', authenticate, authorize('admin'), listStores);
+router.get('/', authenticate, authorize('admin'), storeController.listStores);
+router.get('/user', authenticate, storeController.getStoresForUser);
+router.post('/:id/rate', authenticate, storeController.rateStore);
+router.get('/owner', authenticate, authorize('store_owner'), storeController.getStoreForOwner);
 
-// Normal user routes
-router.get('/user', authenticate, getStoresForUser);
-router.post('/:id/rate', authenticate, rateStore);
-
-// Store Owner route
-router.get('/owner', authenticate, authorize('store_owner'), getStoreForOwner);
-
-module.exports = routes;
+module.exports = router;

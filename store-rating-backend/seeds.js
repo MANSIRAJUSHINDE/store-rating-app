@@ -1,100 +1,31 @@
+// seed.js (or wherever your main seed script is)
 require('dotenv').config();
-const bcrypt = require('bcrypt');
-// Change: Ensure the path matches your actual folder structure exactly
-// Linux servers are case-sensitive, so './src/models' must match the folder name
-const { sequelize, User, Store, Rating } = require('./src/models');
+const bcrypt = require('bcryptjs'); // Use bcryptjs
+const { sequelize, User, Store } = require('./src/models');
 
 const seedDatabase = async () => {
   try {
     console.log('⏳ Starting database seeding...');
-
-    // ✅ Ensure DB tables exist
-    // Changed: force: false is safer for production so you don't delete real data by mistake
     await sequelize.sync({ force: false });
 
-    // 1️⃣ Create Admin
+    // 1. Create Admin
     let admin = await User.findOne({ where: { email: 'admin@example.com' } });
     if (!admin) {
-      // Best Practice: In a real app, use an Env variable for the initial admin password
-      const hashedPassword = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'Admin@123', 10);
+      const hashedPassword = await bcrypt.hash('Admin@123', 10);
       admin = await User.create({
         name: 'Admin User',
         email: 'admin@example.com',
         password: hashedPassword,
-        address: '123 Admin Street, City, Country',
+        address: '123 Admin Street',
         role: 'admin',
       });
-      console.log('✅ Admin created:', admin.name);
-    } else {
-      console.log('ℹ️ Admin already exists:', admin.name);
+      console.log('✅ Admin created');
     }
 
-    // 2️⃣ Create Store Owner
-    let owner = await User.findOne({ where: { email: 'owner@example.com' } });
-    if (!owner) {
-      const hashedPassword = await bcrypt.hash('Owner@123', 10);
-      owner = await User.create({
-        name: 'Store Owner',
-        email: 'owner@example.com',
-        password: hashedPassword,
-        address: '456 Owner Street, City, Country',
-        role: 'store_owner',
-      });
-      console.log('✅ Store owner created:', owner.name);
-    } else {
-      console.log('ℹ️ Store owner already exists:', owner.name);
-    }
-
-    // 3️⃣ Create Stores
-    const storesData = [
-      {
-        name: 'Tech Gadgets',
-        email: 'techgadgets@example.com',
-        address: '101 Tech Street, City, Country',
-        ownerId: owner.id,
-      },
-      {
-        name: 'Fashion Hub',
-        email: 'fashionhub@example.com',
-        address: '202 Fashion Avenue, City, Country',
-        ownerId: owner.id,
-      },
-    ];
-
-    for (const storeData of storesData) {
-      const existingStore = await Store.findOne({ where: { email: storeData.email } });
-      if (!existingStore) {
-        await Store.create(storeData);
-        console.log('✅ Store created:', storeData.name);
-      } else {
-        console.log('ℹ️ Store already exists:', storeData.name);
-      }
-    }
-
-    // 4️⃣ Create Sample Ratings
-    const users = [admin, owner]; 
-    const stores = await Store.findAll();
-
-    for (const store of stores) {
-      for (const user of users) {
-        const existingRating = await Rating.findOne({
-          where: { userId: user.id, storeId: store.id },
-        });
-        if (!existingRating) {
-          await Rating.create({
-            userId: user.id,
-            storeId: store.id,
-            rating: Math.floor(Math.random() * 5) + 1, 
-          });
-          console.log(`⭐ Rating created by ${user.name} for ${store.name}`);
-        }
-      }
-    }
-
-    console.log('🚀 Database seeding completed successfully!');
+    console.log('✅ Seeding finished successfully');
     process.exit(0);
   } catch (error) {
-    console.error('❌ Error seeding database:', error);
+    console.error('❌ Seeding failed:', error);
     process.exit(1);
   }
 };
