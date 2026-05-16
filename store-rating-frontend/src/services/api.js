@@ -1,9 +1,13 @@
 import axios from "axios";
 
+// FIXED: Dynamically strip trailing slashes to prevent 404 double-slash routing issues
+const rawUrl = import.meta.env.VITE_BACKEND_URL 
+  ? import.meta.env.VITE_BACKEND_URL.replace(/\/$/, "") 
+  : "http://localhost:5000";
+
 // Create axios instance
 const API = axios.create({
-  // FIXED: Secure template strings dynamically pulling from production configuration routing profiles
-  baseURL: `${import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"}/api`,
+  baseURL: `${rawUrl}/api`,
 });
 
 // Request interceptor: Automatically attaches the token to every request

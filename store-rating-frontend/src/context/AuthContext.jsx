@@ -12,9 +12,13 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true); // optional: loading state for initial fetch
   const [message, setMessage] = useState("");
 
-  // FIXED: Dynamic Base URL targeting production or falling back to local
+  // FIXED: Dynamically strip trailing slashes to prevent 404 double-slash routing issues
+  const rawUrl = import.meta.env.VITE_BACKEND_URL 
+    ? import.meta.env.VITE_BACKEND_URL.replace(/\/$/, "") 
+    : "http://localhost:5000";
+
   const API = axios.create({ 
-    baseURL: `${import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"}/api` 
+    baseURL: `${rawUrl}/api` 
   });
 
   // Automatically attach token to every request
