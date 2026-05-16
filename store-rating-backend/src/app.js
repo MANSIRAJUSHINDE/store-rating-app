@@ -7,15 +7,25 @@ const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 
-// Updated CORS to allow your exact active Vercel frontend URL
+// A dynamic whitelist checking mechanism
 app.use(cors({
-  origin: [
-    "http://localhost:5173",                          // Allows local development
-    "https://store-rating-app-ruddy.vercel.app"       // Your actual live active Vercel link
-  ],
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Added OPTIONS to support preflight checks safely
+  origin: function (origin, callback) {
+    // 1. Allow local development environments or server-to-server requests (no origin)
+    if (!origin || origin.startsWith("http://localhost:")) {
+      return callback(null, true);
+    }
+    
+    // 2. Dynamic Match: Allow ANY deployment URL matching your Vercel project footprint
+    if (origin.includes("mansirajushindes-projects.vercel.app") || origin.includes("store-rating-app")) {
+      return callback(null, true);
+    }
+    
+    // Block anything else for security
+    return callback(new Error("Blocked by CORS security wrapper"));
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization"]   // Explicitly allows your JWT Bearer tokens to pass through
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
 app.use(express.json());
