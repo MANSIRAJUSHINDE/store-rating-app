@@ -7,20 +7,20 @@ const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 
-// A dynamic whitelist checking mechanism
+// Dynamic CORS configuration to allow local work and all your Vercel deployments
 app.use(cors({
   origin: function (origin, callback) {
-    // 1. Allow local development environments or server-to-server requests (no origin)
+    // Allow local development or tools like Postman (which don't send an origin header)
     if (!origin || origin.startsWith("http://localhost:")) {
       return callback(null, true);
     }
     
-    // 2. Dynamic Match: Allow ANY deployment URL matching your Vercel project footprint
+    // Dynamically allow any URL containing your Vercel project name or profile footprint
     if (origin.includes("mansirajushindes-projects.vercel.app") || origin.includes("store-rating-app")) {
       return callback(null, true);
     }
     
-    // Block anything else for security
+    // Block any other unauthorized domain
     return callback(new Error("Blocked by CORS security wrapper"));
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
