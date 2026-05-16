@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import API, { setToken } from "../../services/api";
+import API from "../../services/api";
 
 const RateStoreForm = ({ store, onRatingUpdate }) => {
   const [rating, setRating] = useState(store.userRating || 0);
