@@ -12,8 +12,10 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true); // optional: loading state for initial fetch
   const [message, setMessage] = useState("");
 
-  // Create an Axios instance with base URL
-  const API = axios.create({ baseURL: "http://localhost:5000/api" });
+  // FIXED: Dynamic Base URL targeting production or falling back to local
+  const API = axios.create({ 
+    baseURL: `${import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"}/api` 
+  });
 
   // Automatically attach token to every request
   API.interceptors.request.use((config) => {

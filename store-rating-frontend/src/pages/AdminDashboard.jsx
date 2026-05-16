@@ -1,7 +1,5 @@
-// src/pages/AdminDashboard.jsx
 import React, { useContext, useEffect, useState } from "react";
 import { AuthContext } from "../context/AuthContext";
-import axios from "axios";
 import AddUserForm from "../components/admin/AddUserForm";
 import UserTable from "../components/admin/UserTable";
 import StoreTable from "../components/admin/StoreTable";
@@ -9,10 +7,11 @@ import AddStoreForm from "../components/admin/AddStoreForm";
 import UserDetailsModal from "../components/admin/UserDetailsModal";
 import StoreDetailsModal from "../components/admin/StoreDetailsModal";
 import AdminStats from "../components/admin/AdminStats";
-import Header from "../components/common/Header"; // ✅ Import the reusable Header
+import Header from "../components/common/Header"; 
 
 const AdminDashboard = () => {
-  const { user, logout, authHeaders } = useContext(AuthContext);
+  // FIXED: Extracted the configured API client directly from your context provider
+  const { user, logout, API } = useContext(AuthContext);
 
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
@@ -30,14 +29,14 @@ const AdminDashboard = () => {
     setError("");
 
     try {
-      const headers = authHeaders();
-      const statsRes = await axios.get("http://localhost:5000/api/admin/dashboard", { headers });
+      // FIXED: Using interceptor-powered API instance instead of raw axios with localhost strings
+      const statsRes = await API.get("/admin/dashboard");
       setStats(statsRes.data);
 
-      const usersRes = await axios.get("http://localhost:5000/api/admin/users", { headers });
+      const usersRes = await API.get("/admin/users");
       setUsers(usersRes.data.users || []);
 
-      const storesRes = await axios.get("http://localhost:5000/api/admin/stores", { headers });
+      const storesRes = await API.get("/admin/stores");
       setStores(storesRes.data.stores || []);
     } catch (err) {
       console.error(err.response || err);
@@ -81,28 +80,21 @@ const AdminDashboard = () => {
         </button>
       </div>
     );
+
   return (
     <div className="min-h-screen w-full bg-gray-50">
-
-      {/* ✅ Sticky full-width header */}
       <Header title="Admin Dashboard" user={user} logout={logout} />
 
-      {/* ✅ Main content with responsive padding, offset for sticky header */}
       <div className="pt-20 px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12">
-
-        {/* Stats Section */}
         {stats && (
           <div className="mb-8">
             <AdminStats stats={stats} />
           </div>
         )}
 
-        {/* Users Section */}
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-            <h2 className="text-xl sm:text-2xl font-bold text-indigo-700 truncate">
-              Users
-            </h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-indigo-700 truncate">Users</h2>
             {!showAddUser && (
               <button
                 onClick={() => setShowAddUser(true)}
@@ -115,12 +107,9 @@ const AdminDashboard = () => {
           <UserTable users={users} onViewDetails={(id) => setSelectedUserId(id)} />
         </div>
 
-        {/* Stores Section */}
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-            <h2 className="text-xl sm:text-2xl font-bold text-indigo-700 truncate">
-              Stores
-            </h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-indigo-700 truncate">Stores</h2>
             {!showAddStore && (
               <button
                 onClick={() => setShowAddStore(true)}
@@ -132,10 +121,8 @@ const AdminDashboard = () => {
           </div>
           <StoreTable stores={stores} onViewDetails={(id) => setSelectedStoreId(id)} />
         </div>
-
       </div>
 
-      {/* ✅ Add User Modal */}
       {showAddUser && (
         <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-30">
           <div className="w-full max-w-lg p-6 relative bg-white border border-gray-300">
@@ -150,7 +137,6 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {/* ✅ Add Store Modal */}
       {showAddStore && (
         <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-30">
           <div className="w-full max-w-lg p-6 relative bg-white border border-gray-300">
@@ -165,24 +151,15 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {/* ✅ User Details Modal */}
       {selectedUserId && (
-        <UserDetailsModal
-          userId={selectedUserId}
-          onClose={() => setSelectedUserId(null)}
-        />
+        <UserDetailsModal userId={selectedUserId} onClose={() => setSelectedUserId(null)} />
       )}
 
-      {/* ✅ Store Details Modal */}
       {selectedStoreId && (
-        <StoreDetailsModal
-          storeId={selectedStoreId}
-          onClose={() => setSelectedStoreId(null)}
-        />
+        <StoreDetailsModal storeId={selectedStoreId} onClose={() => setSelectedStoreId(null)} />
       )}
     </div>
   );
-
 };
 
 export default AdminDashboard;

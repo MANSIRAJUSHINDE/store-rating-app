@@ -2,14 +2,14 @@ import axios from "axios";
 
 // Create axios instance
 const API = axios.create({
-  // Fallback to localhost if the env variable isn't set
+  // FIXED: Secure template strings dynamically pulling from production configuration routing profiles
   baseURL: `${import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"}/api`,
 });
 
 // Request interceptor: Automatically attaches the token to every request
 API.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token"); // Or wherever you store your token
+    const token = localStorage.getItem("token"); 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
