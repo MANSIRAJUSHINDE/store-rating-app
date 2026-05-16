@@ -12,7 +12,7 @@ const RateStoreForm = ({ store, onRatingUpdate }) => {
     setError("");
 
     try {
-      setToken(localStorage.getItem("token"));
+      // FIXED: Removed the broken setToken call. Axios interceptor handles this automatically now!
       await API.post(`/stores/${store.id}/rate`, { rating });
       onRatingUpdate(store.id, rating);
     } catch (err) {
