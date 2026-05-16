@@ -7,14 +7,15 @@ const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 
-// Updated CORS to allow your live frontend
+// Updated CORS to allow your exact active Vercel frontend URL
 app.use(cors({
   origin: [
-    "http://localhost:5173", // Allows local development
-    "https://store-rating-frontend-nine.vercel.app", // REPLACE with your actual Vercel URL
+    "http://localhost:5173",                          // Allows local development
+    "https://store-rating-app-ruddy.vercel.app"       // Your actual live active Vercel link
   ],
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Added OPTIONS to support preflight checks safely
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization"]   // Explicitly allows your JWT Bearer tokens to pass through
 }));
 
 app.use(express.json());
