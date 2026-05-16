@@ -1,39 +1,34 @@
-import axios from "axios";
+import axios from 'axios';
 
-// FIXED: Dynamically strip trailing slashes to prevent 404 double-slash routing issues
-const rawUrl = import.meta.env.VITE_BACKEND_URL 
-  ? import.meta.env.VITE_BACKEND_URL.replace(/\/$/, "") 
-  : "http://localhost:5000";
+// HARDCODED FIX: Directly maps request pathways to your production Render server
+const rawUrl = "https://store-rating-app-deploy.onrender.com";
 
-// Create axios instance
 const API = axios.create({
   baseURL: `${rawUrl}/api`,
 });
 
-// Request interceptor: Automatically attaches the token to every request
-API.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("token"); 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
+// Automatically inject JWT Token into request headers if it exists
+API.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config; // This works perfectly!
+}, (error) => {
+  return Promise.reject(error);
+});
+
+// FIX: Add a response interceptor to handle global errors (like an expired token)
+API.interceptors.response.use(
+  (response) => response,
   (error) => {
+    if (error.response && error.response.status === 401) {
+      // Clear token and kick out user if unauthorized/session expired
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
     return Promise.reject(error);
   }
 );
-
-/**
- * Helper to manually set/remove token if needed 
- * (Useful for immediate updates after Login/Logout)
- */
-export const setToken = (token) => {
-  if (token) {
-    API.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-  } else {
-    delete API.defaults.headers.common["Authorization"];
-  }
-};
 
 export default API;

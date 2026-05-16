@@ -9,13 +9,11 @@ export const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true); // optional: loading state for initial fetch
+  const [loading, setLoading] = useState(true); // loading state for initial fetch
   const [message, setMessage] = useState("");
 
-  // FIXED: Dynamically strip trailing slashes to prevent 404 double-slash routing issues
-  const rawUrl = import.meta.env.VITE_BACKEND_URL 
-    ? import.meta.env.VITE_BACKEND_URL.replace(/\/$/, "") 
-    : "http://localhost:5000";
+  // HARDCODED FIX: Bypass Vercel env bugs by mapping directly to your live production Render backend
+  const rawUrl = "https://store-rating-app-deploy.onrender.com";
 
   const API = axios.create({ 
     baseURL: `${rawUrl}/api` 
