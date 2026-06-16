@@ -1,3 +1,8 @@
+<<<<<<< HEAD
+=======
+// src/context/AuthContext.jsx
+
+>>>>>>> ac1d318 (Add source code files)
 import React, { createContext, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../services/api";
@@ -13,16 +18,41 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
+<<<<<<< HEAD
   // Fetch logged-in user on app load
+=======
+  // ✅ LOGOUT
+  const logout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setToken(null);
+    setUser(null);
+    navigate("/login");
+  };
+
+  // ✅ GET USER ON REFRESH
+>>>>>>> ac1d318 (Add source code files)
   useEffect(() => {
     const fetchUser = async () => {
       try {
         const token = localStorage.getItem("token");
 
+<<<<<<< HEAD
         if (token) {
           const res = await API.get("/auth/me");
           setUser(res.data.user);
         }
+=======
+        if (!token || token === "null") {
+          setLoading(false);
+          return;
+        }
+
+        setToken(token);
+
+        const res = await API.get("/auth/me");
+        setUser(res.data.user);
+>>>>>>> ac1d318 (Add source code files)
       } catch (error) {
         console.error("Failed to fetch user:", error);
         logout();
@@ -34,7 +64,11 @@ export const AuthProvider = ({ children }) => {
     fetchUser();
   }, []);
 
+<<<<<<< HEAD
   // Signup
+=======
+  // ✅ SIGNUP
+>>>>>>> ac1d318 (Add source code files)
   const signup = async (name, email, password, address) => {
     const res = await API.post("/auth/signup", {
       name,
@@ -43,6 +77,7 @@ export const AuthProvider = ({ children }) => {
       address,
     });
 
+<<<<<<< HEAD
     localStorage.setItem("token", res.data.token);
     setUser(res.data.user);
 
@@ -50,6 +85,19 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Login
+=======
+      setMessage("Signup successful!");
+      return res.data;
+    } catch (error) {
+      console.log("Signup error:", error.response?.data);
+      throw new Error(
+        error.response?.data?.message || "Signup failed"
+      );
+    }
+  };
+
+  // ✅ LOGIN (FIXED SWITCH & ROUTING RACE CONDITION)
+>>>>>>> ac1d318 (Add source code files)
   const login = async (email, password) => {
     try {
       const res = await API.post("/auth/login", {
@@ -61,16 +109,17 @@ export const AuthProvider = ({ children }) => {
       setUser(res.data.user);
       setMessage("Login successful! Redirecting...");
 
-      setTimeout(() => {
-        switch (res.data.user.role) {
-          case "admin":
-            navigate("/admin");
-            break;
+      // ✅ Instantly route without setTimeout to fix redirection bugs
+      switch (res.data.user.role) {
+        case "admin":
+          navigate("/admin");
+          break;
 
-          case "store_owner":
-            navigate("/owner");
-            break;
+        case "store_owner":
+          navigate("/owner");
+          break;
 
+<<<<<<< HEAD
           default:
             navigate("/user");
         }
@@ -90,9 +139,26 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Helper for manual auth headers
+=======
+        case "normal":
+        default:
+          navigate("/user");
+          break;
+      }
+
+      return res.data;
+    } catch (error) {
+      console.log("Login error:", error.response?.data);
+      throw new Error(
+        error.response?.data?.message || "Login failed"
+      );
+    }
+  };
+
+  // ✅ AUTH HEADERS
+>>>>>>> ac1d318 (Add source code files)
   const authHeaders = () => {
     const token = localStorage.getItem("token");
-
     return {
       Authorization: token ? `Bearer ${token}` : "",
     };

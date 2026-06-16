@@ -1,0 +1,1148 @@
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\app.js === 
+const express = require('express');
+const cors = require('cors');
+const app = express();
+
+const authRoutes = require('./routes/authRoutes');
+const storeRoutes = require('./routes/storeRoutes');
+const ratingRoutes = require('./routes/ratingRoutes'); // optional if you have rating-specific routes
+const adminRoutes = require('./routes/adminRoutes');   // optional if you have admin-specific routes
+const { authenticate } = require('./middleware/authMiddleware');
+
+require('dotenv').config();
+
+// Middleware
+app.use(express.json());
+
+// ✅ Enable CORS with full config
+app.use(cors({
+  origin: 'http://localhost:5173', // frontend URL
+  credentials: true,               // allow cookies or auth headers
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Routes
+app.use('/api/admin', adminRoutes);   // Admin-only routes
+app.use('/api/auth', authRoutes);     // Signup/Login/Update password
+app.use('/api/stores', storeRoutes);  // Store-related routes
+app.use('/api/ratings', ratingRoutes); // Optional rating routes
+
+// Default root route
+app.get('/', (req, res) => res.send('Store Rating API is running.'));
+
+// Protected test route
+app.get('/api/protected', authenticate, (req, res) => {
+  res.json({ message: `Welcome ${req.user.name}! This is a protected route.` });
+});
+
+module.exports = app;
+
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\db.js === 
+const { Sequelize } = require('sequelize');
+require('dotenv').config();
+
+const sequelize = new Sequelize(
+  process.env.DB_NAME, 
+  process.env.DB_USER, 
+  process.env.DB_PASSWORD, 
+  {
+    host: process.env.DB_HOST || 'localhost',
+    dialect: 'mysql',
+    logging: console.log,
+  }
+);
+
+sequelize.authenticate()
+  .then(() => console.log('✅ Database connection successful'))
+  .catch(err => console.error('❌ Unable to connect to the database:', err));
+
+module.exports = { sequelize };
+
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\controllers\adminController.js === 
+const { User, Store, Rating } = require('../models');
+const bcrypt = require('bcrypt');
+
+// --------------------
+// List all stores with average ratings
+// --------------------
+exports.listStores = async (req, res) => {
+  try {
+    const stores = await Store.findAll({
+      include: [{ model: Rating, as: 'ratings' }],
+      attributes: ['id', 'name', 'email', 'address', 'ownerId'],
+    });
+
+    const response = stores.map(store => {
+      const averageRating = store.ratings.length
+        ? (store.ratings.reduce((sum, r) => sum + r.rating, 0) / store.ratings.length).toFixed(1)
+        : 0;
+
+      return {
+        id: store.id,
+        name: store.name,
+        email: store.email,
+        address: store.address,
+        averageRating
+      };
+    });
+
+    res.json({ stores: response });
+  } catch (error) {
+    console.error('List stores error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// --------------------
+// List all users with average rating (if store_owner)
+// --------------------
+exports.listUsers = async (req, res) => {
+  try {
+    const users = await User.findAll({
+      attributes: ['id', 'name', 'email', 'address', 'role'],
+      include: [
+        {
+          model: Store,
+          as: 'ownedStores',
+          include: [{ model: Rating, as: 'ratings' }]
+        }
+      ]
+    });
+
+    const response = users.map(u => {
+      let averageRating = null;
+      if (u.role === 'store_owner' && u.ownedStores?.length > 0) {
+        let totalRatings = 0;
+        let ratingsCount = 0;
+        u.ownedStores.forEach(store => {
+          store.ratings.forEach(r => {
+            totalRatings += r.rating;
+            ratingsCount++;
+          });
+        });
+        averageRating = ratingsCount ? (totalRatings / ratingsCount).toFixed(1) : null;
+      }
+
+      return {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        address: u.address,
+        role: u.role,
+        averageRating
+      };
+    });
+
+    res.json({ users: response });
+  } catch (err) {
+    console.error('List users error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// --------------------
+// Get user details by ID
+// --------------------
+exports.getUserDetails = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id, {
+      attributes: ['id', 'name', 'email', 'address', 'role'],
+      include: [
+        {
+          model: Store,
+          as: 'ownedStores',
+          include: [{ model: Rating, as: 'ratings' }]
+        }
+      ]
+    });
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const response = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      address: user.address,
+      role: user.role,
+    };
+
+    if (user.role === 'store_owner' && user.ownedStores?.length > 0) {
+      let totalRatings = 0;
+      let ratingsCount = 0;
+      user.ownedStores.forEach(store => {
+        store.ratings.forEach(rating => {
+          totalRatings += rating.rating;
+          ratingsCount++;
+        });
+      });
+      response.storeRating = ratingsCount ? (totalRatings / ratingsCount).toFixed(1) : null;
+      response.storesOwned = user.ownedStores.map(store => ({
+        id: store.id,
+        name: store.name,
+        averageRating: store.ratings.length
+          ? (store.ratings.reduce((sum, r) => sum + r.rating, 0) / store.ratings.length).toFixed(1)
+          : null
+      }));
+    }
+
+    res.json(response);
+  } catch (error) {
+    console.error('Get user details error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// --------------------
+// Dashboard stats
+// --------------------
+exports.dashboardStats = async (req, res) => {
+  try {
+    const totalUsers = await User.count();
+    const totalStores = await Store.count();
+    const totalRatings = await Rating.count();
+
+    res.json({ totalUsers, totalStores, totalRatings });
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// --------------------
+// Add new user
+// --------------------
+exports.addUser = async (req, res) => {
+  try {
+    const { name, email, password, address, role } = req.body;
+
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) return res.status(400).json({ message: 'Email already exists' });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = await User.create({ name, email, address, password: hashedPassword, role });
+
+    res.status(201).json({
+      message: 'User created successfully',
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        address: newUser.address,
+        role: newUser.role
+      }
+    });
+  } catch (error) {
+    console.error('Add user error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// --------------------
+// Add new store
+// --------------------
+exports.addStore = async (req, res) => {
+  try {
+    const { name, email, address, ownerId } = req.body;
+
+    const existingStore = await Store.findOne({ where: { email } });
+    if (existingStore) return res.status(400).json({ message: 'Store email already exists' });
+
+    const owner = await User.findByPk(ownerId);
+    if (!owner || owner.role !== 'store_owner') {
+      return res.status(400).json({ message: 'Invalid store owner' });
+    }
+
+    const newStore = await Store.create({ name, email, address, ownerId });
+
+    res.status(201).json({
+      message: 'Store created successfully',
+      store: {
+        id: newStore.id,
+        name: newStore.name,
+        email: newStore.email,
+        address: newStore.address,
+        ownerId: newStore.ownerId
+      }
+    });
+  } catch (error) {
+    console.error('Add store error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// --------------------
+// Get store details by ID
+// --------------------
+exports.getStoreDetails = async (req, res) => {
+  try {
+    const store = await Store.findByPk(req.params.id, {
+      include: [{ model: Rating, as: 'ratings' }]
+    });
+
+    if (!store) return res.status(404).json({ message: 'Store not found' });
+
+    const averageRating = store.ratings.length
+      ? (store.ratings.reduce((sum, r) => sum + r.rating, 0) / store.ratings.length).toFixed(1)
+      : 0;
+
+    res.json({
+      id: store.id,
+      name: store.name,
+      email: store.email,
+      address: store.address,
+      ownerId: store.ownerId,
+      averageRating
+    });
+  } catch (error) {
+    console.error('Get store details error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+// Get store ratings with user info
+exports.getStoreRatings = async (req, res) => {
+  try {
+    const store = await Store.findByPk(req.params.id, {
+      include: [
+        {
+          model: Rating,
+          as: 'ratings',
+          include: [
+            { model: User, as: 'user', attributes: ['id', 'name', 'email'] }
+          ]
+        }
+      ]
+    });
+
+    if (!store) return res.status(404).json({ message: 'Store not found' });
+
+    const ratingsWithUser = store.ratings.map(r => ({
+      id: r.id,
+      rating: r.rating,
+      userId: r.userId,
+      userName: r.user?.name,
+      userEmail: r.user?.email
+    }));
+
+    res.json({
+      storeId: store.id,
+      storeName: store.name,
+      ratings: ratingsWithUser
+    });
+  } catch (error) {
+    console.error('Get store ratings error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\controllers\authController.js === 
+const { validationResult } = require('express-validator');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const { User } = require('../models');
+
+// ✅ Signup function
+exports.signup = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array().map(err => err.msg).join(", ") });
+    }
+
+    const { name, email, address, password } = req.body;
+
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email already exists' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = await User.create({
+      name,
+      email,
+      address,
+      password: hashedPassword,
+      role: 'normal',
+    });
+
+    res.status(201).json({
+      message: 'User registered successfully',
+      user: { id: user.id, name: user.name, email: user.email, role: user.role }
+    });
+  } catch (error) {
+    console.error('Signup error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ✅ Login function
+exports.login = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array().map(err => err.msg).join(", ") });
+    }
+
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ where: { email } });
+    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+
+    const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ✅ Update Password function
+exports.updatePassword = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array().map(err => err.msg).join(", ") });
+    }
+
+    const { oldPassword, newPassword } = req.body;
+
+    const user = await User.findByPk(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) return res.status(400).json({ message: 'Old password is incorrect' });
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    res.json({ message: 'Password updated successfully.' });
+  } catch (error) {
+    console.error('Update password error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ✅ Get current logged-in user
+exports.getMe = async (req, res) => {
+  try {
+    const userId = req.user.id; // set by authMiddleware
+    const user = await User.findByPk(userId, {
+      attributes: { exclude: ['password'] }
+    });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    res.json({ user });
+  } catch (error) {
+    console.error('GetMe error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\controllers\ratingController.js === 
+const { Rating, Store, User } = require('../models');
+
+// ✅ Submit or update a rating
+exports.submitRating = async (req, res) => {
+  try {
+    const { storeId, rating } = req.body;
+    const userId = req.user.id;
+
+    // Validate rating
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'Rating must be between 1 and 5' });
+    }
+
+    // Check if rating already exists
+    let existingRating = await Rating.findOne({ where: { storeId, userId } });
+
+    if (existingRating) {
+      existingRating.rating = rating;
+      await existingRating.save();
+      return res.json({ message: 'Rating updated successfully', rating: existingRating });
+    }
+
+    // Create new rating
+    const newRating = await Rating.create({ storeId, userId, rating });
+    res.status(201).json({ message: 'Rating submitted successfully', rating: newRating });
+
+  } catch (error) {
+    console.error('Submit rating error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ✅ Get ratings submitted by logged-in user
+exports.getUserRatings = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const ratings = await Rating.findAll({
+      where: { userId },
+      include: [{ model: Store, attributes: ['id', 'name', 'address', 'email'] }],
+    });
+
+    res.json(ratings);
+  } catch (error) {
+    console.error('Get user ratings error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ✅ Store owner: get ratings for their stores
+exports.getStoreOwnerRatings = async (req, res) => {
+  try {
+    const ownerId = req.user.id;
+
+    const stores = await Store.findAll({
+      where: { ownerId },
+      include: [{
+        model: Rating,
+        as: 'ratings',
+        include: [{ model: User, attributes: ['id', 'name', 'email'] }]
+      }],
+    });
+
+    const response = stores.map(store => {
+      const ratingsArray = store.ratings.map(r => r.rating);
+      const avgRating = ratingsArray.length ? ratingsArray.reduce((a, b) => a + b, 0) / ratingsArray.length : null;
+
+      return {
+        storeId: store.id,
+        storeName: store.name,
+        storeEmail: store.email,
+        storeAddress: store.address,
+        averageRating: avgRating,
+        ratings: store.ratings,
+      };
+    });
+
+    res.json(response);
+  } catch (error) {
+    console.error('Store owner ratings error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\controllers\storeController.js === 
+// src/controllers/storeController.js
+const { Store, Rating, User } = require('../models');
+const { Op } = require('sequelize');
+
+// =======================
+// Admin: Create store
+// =======================
+exports.createStore = async (req, res) => {
+  try {
+    const { name, email, address } = req.body;
+    const store = await Store.create({ name, email, address, ownerId: req.user.id });
+    res.status(201).json(store);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// =======================
+// Admin: List all stores with ratings
+// =======================
+exports.listStores = async (req, res) => {
+  try {
+    const { name, address } = req.query;
+    const filters = {};
+    if (name) filters.name = { [Op.like]: `%${name}%` };
+    if (address) filters.address = { [Op.like]: `%${address}%` };
+
+    const stores = await Store.findAll({
+      where: filters,
+      include: [
+        {
+          model: Rating,
+          as: 'ratings',
+          include: [{ model: User, attributes: ['id', 'name'] }],
+        },
+      ],
+    });
+
+    const result = stores.map(store => {
+      const ratingsArray = store.ratings.map(r => r.rating);
+      const avgRating = ratingsArray.length
+        ? ratingsArray.reduce((a, b) => a + b, 0) / ratingsArray.length
+        : null;
+
+      return {
+        id: store.id,
+        name: store.name,
+        email: store.email,
+        address: store.address,
+        overallRating: avgRating,
+        ratings: store.ratings,
+      };
+    });
+
+    res.json({ stores: result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// =======================
+// Normal User: Get stores with avg rating + user rating
+// =======================
+// getStoresForUser
+exports.getStoresForUser = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const stores = await Store.findAll({
+      include: [{
+        model: Rating,
+        as: 'ratings',       // use the alias from Store model
+        include: [{
+          model: User,
+          as: 'user',        // use the alias from Rating model
+          attributes: ['id', 'name']
+        }]
+      }],
+    });
+
+    const result = stores.map(store => {
+      const ratingsArray = store.ratings.map(r => r.rating);
+      const avgRating = ratingsArray.length ? ratingsArray.reduce((a, b) => a + b, 0) / ratingsArray.length : null;
+      const userRating = store.ratings.find(r => r.userId === userId)?.rating || null;
+
+      return { 
+        id: store.id, 
+        name: store.name, 
+        email: store.email, 
+        address: store.address, 
+        overallRating: avgRating, 
+        userRating 
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("getStoresForUser error:", err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+// =======================
+// Normal User: Submit or update rating
+// =======================
+exports.rateStore = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const storeId = req.params.id;
+    const { rating } = req.body;
+
+    if (!rating || rating < 1 || rating > 5)
+      return res.status(400).json({ message: 'Rating must be 1-5' });
+
+    const existingRating = await Rating.findOne({ where: { userId, storeId } });
+
+    if (existingRating) {
+      existingRating.rating = rating;
+      await existingRating.save();
+    } else {
+      await Rating.create({ userId, storeId, rating });
+    }
+
+    res.json({ message: 'Rating submitted successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// =======================
+// Store Owner: Dashboard view
+// =======================
+exports.getStoreOwnerDashboard = async (req, res) => {
+  try {
+    const store = await Store.findOne({
+      where: { ownerId: req.user.id },
+      include: [{ model: Rating, as: "ratings" }],
+    });
+
+    if (!store) return res.status(404).json({ message: "Store not found" });
+
+    const ratingsArray = store.ratings.map(r => r.rating);
+    const avgRating = ratingsArray.length
+      ? ratingsArray.reduce((a, b) => a + b, 0) / ratingsArray.length
+      : 0;
+
+    res.json({ storeId: store.id, storeName: store.name, ratings: store.ratings, avgRating });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+// Get store for the logged-in owner
+exports.getStoreForOwner = async (req, res) => {
+  try {
+    const store = await Store.findOne({
+      where: { ownerId: req.user.id },
+      include: [
+        {
+          model: Rating,
+          as: "ratings",
+          include: [{ model: User, attributes: ["id", "name"], as: "user" }],
+        },
+      ],
+    });
+
+    if (!store) return res.status(404).json({ message: "Store not found" });
+
+    res.json({ store });
+  } catch (err) {
+    console.error("getStoreForOwner error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\middleware\authMiddleware.js === 
+const jwt = require('jsonwebtoken');
+const { User } = require('../models');
+
+exports.authenticate = async (req, res, next) => {
+  try {
+    const header = req.headers['authorization'];
+    if (!header) return res.status(401).json({ message: 'Authorization header missing' });
+
+    const parts = header.split(' ');
+    if (parts.length !== 2 || parts[0] !== 'Bearer') return res.status(401).json({ message: 'Invalid authorization format' });
+
+    const token = parts[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const user = await User.findByPk(decoded.id);
+    if (!user) return res.status(401).json({ message: 'User not found' });
+
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('Authentication error:', error);
+    res.status(401).json({ message: 'Unauthorized' });
+  }
+};
+
+exports.authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) return res.status(403).json({ message: 'Forbidden: Insufficient permissions' });
+    next();
+  };
+};
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\middleware\validators.js === 
+// src/middleware/validators.js
+const { body } = require('express-validator');
+
+exports.signupValidator = [
+  body('name')
+    .isLength({ min: 20, max: 60 })
+    .withMessage('Name must be between 20 and 60 characters'),
+  body('email')
+    .isEmail()
+    .withMessage('Enter a valid email address'),
+  body('password')
+    .isLength({ min: 8, max: 16 })
+    .withMessage('Password must be between 8 and 16 characters')
+    .matches(/[A-Z]/)
+    .withMessage('Password must contain at least one uppercase letter')
+    .matches(/[!@#$%^&*(),.?":{}|<>]/)
+    .withMessage('Password must contain at least one special character'),
+  body('address')
+    .isLength({ max: 400 })
+    .withMessage('Address can be maximum 400 characters'),
+];
+
+exports.loginValidator = [
+  body('email')
+    .isEmail()
+    .withMessage('Enter a valid email address'),
+  body('password')
+    .notEmpty()
+    .withMessage('Password is required'),
+];
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\models\index.js === 
+const { Sequelize } = require('sequelize');
+const UserModel = require('./User');
+const StoreModel = require('./Store');
+const RatingModel = require('./Rating');
+require('dotenv').config();
+
+// Initialize Sequelize
+const sequelize = new Sequelize(
+  process.env.DB_NAME,
+  process.env.DB_USER,
+  process.env.DB_PASSWORD,
+  {
+    host: process.env.DB_HOST,
+    dialect: 'mysql',
+    logging: false
+  }
+);
+
+// Initialize models
+const User = UserModel(sequelize);
+const Store = StoreModel(sequelize);
+const Rating = RatingModel(sequelize);
+
+// Set up associations
+User.associate({ Store, Rating });
+Store.associate({ User, Rating });
+Rating.associate({ User, Store });
+
+// Export models and sequelize instance
+module.exports = { sequelize, User, Store, Rating };
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\models\Rating.js === 
+const { Model, DataTypes } = require('sequelize');
+
+class Rating extends Model {
+  static associate(models) {
+    this.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
+    this.belongsTo(models.Store, { foreignKey: 'storeId', as: 'store' });
+  }
+}
+
+module.exports = (sequelize) => {
+  Rating.init(
+    {
+      rating: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        validate: { min: 1, max: 5 }
+      },
+      userId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: 'users', key: 'id' }
+      },
+      storeId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: 'stores', key: 'id' }
+      }
+    },
+    {
+      sequelize,
+      modelName: 'Rating',
+      tableName: 'ratings',
+      timestamps: true
+    }
+  );
+
+  return Rating;
+};
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\models\Store.js === 
+const { Model, DataTypes } = require('sequelize');
+
+class Store extends Model {
+  static associate(models) {
+    this.belongsTo(models.User, { foreignKey: 'ownerId', as: 'owner' });
+    this.hasMany(models.Rating, { foreignKey: 'storeId', as: 'ratings' });
+  }
+}
+
+module.exports = (sequelize) => {
+  Store.init(
+    {
+      name: { type: DataTypes.STRING(60), allowNull: false },
+      email: { type: DataTypes.STRING(255), allowNull: false, unique: true, validate: { isEmail: true } },
+      address: { type: DataTypes.STRING(400), allowNull: false },
+      ownerId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: 'users', key: 'id' }
+      }
+    },
+    {
+      sequelize,
+      modelName: 'Store',
+      tableName: 'stores',
+      timestamps: true
+    }
+  );
+
+  return Store;
+};
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\models\User.js === 
+const { Model, DataTypes } = require('sequelize');
+
+class User extends Model {
+  static associate(models) {
+    this.hasMany(models.Store, { foreignKey: 'ownerId', as: 'ownedStores' });
+    this.hasMany(models.Rating, { foreignKey: 'userId', as: 'ratings' });
+  }
+}
+
+module.exports = (sequelize) => {
+  User.init(
+    {
+      name: {
+        type: DataTypes.STRING(60),
+        allowNull: false,
+        validate: { len: [3, 60] } // Admin requirement: 3-60 characters
+      },
+      email: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+        unique: true,
+        validate: { isEmail: true }
+      },
+      password: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+      },
+      address: {
+        type: DataTypes.STRING(400),
+        allowNull: false,
+        validate: { len: [0, 400] }
+      },
+      role: {
+        type: DataTypes.ENUM('admin', 'normal', 'store_owner'),
+        allowNull: false,
+        defaultValue: 'normal'
+      },
+    },
+    {
+      sequelize,
+      modelName: 'User',
+      tableName: 'users',
+      timestamps: true
+    }
+  );
+
+  return User;
+};
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\routes\adminRoutes.js === 
+const express = require('express');
+const router = express.Router();
+const { authenticate, authorize } = require('../middleware/authMiddleware');
+const { body } = require('express-validator');
+
+const {
+  listUsers,
+  getUserDetails,
+  dashboardStats,
+  addUser,
+  listStores,
+  addStore,
+  getStoreDetails,
+  getStoreRatings  // <-- add this
+} = require('../controllers/adminController');
+
+
+// Apply authentication and role authorization for all admin routes
+router.use(authenticate);
+router.use(authorize('admin'));
+
+// Dashboard stats
+router.get('/dashboard', dashboardStats);
+
+// Users
+router.get('/users', listUsers);
+router.get('/users/:id', getUserDetails);
+
+router.post(
+  '/users',
+  [
+    body('name').isLength({ min: 3, max: 60 }).withMessage('Name must be between 3 and 60 characters'),
+    body('email').isEmail().withMessage('Enter a valid email address'),
+    body('password')
+      .isLength({ min: 8, max: 16 }).withMessage('Password must be between 8 and 16 characters')
+      .matches(/[A-Z]/).withMessage('Password must contain at least one uppercase letter')
+      .matches(/[!@#$%^&*(),.?":{}|<>]/).withMessage('Password must contain at least one special character'),
+    body('address').isLength({ max: 400 }).withMessage('Address can be maximum 400 characters'),
+    body('role').isIn(['admin', 'normal', 'store_owner']).withMessage('Role must be admin, normal, or store_owner')
+  ],
+  addUser
+);
+
+// Stores
+router.get('/stores', listStores);
+router.get('/stores/:id', getStoreDetails); // Get store by ID
+router.post('/stores', addStore);
+
+
+// Get all ratings for a store
+router.get('/stores/:id/ratings', getStoreRatings);
+
+module.exports = router;
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\routes\authRoutes.js === 
+const express = require('express');
+const router = express.Router();
+const { signup, login, updatePassword, getMe } = require('../controllers/authController');
+const { authenticate } = require('../middleware/authMiddleware');
+const { body } = require('express-validator');
+
+// Signup
+router.post(
+  '/signup',
+  [
+    body('name').isLength({ min: 3, max: 60 }).withMessage('Name must be between 3-60 chars'),
+    body('email').isEmail().withMessage('Enter a valid email'),
+    body('password')
+      .isLength({ min: 8, max: 16 }).withMessage('Password 8-16 chars')
+      .matches(/[A-Z]/).withMessage('Must contain uppercase')
+      .matches(/[!@#$%^&*(),.?":{}|<>]/).withMessage('Must contain special char'),
+    body('address').isLength({ max: 400 }).withMessage('Max 400 chars')
+  ],
+  signup
+);
+
+// Login
+router.post(
+  '/login',
+  [body('email').isEmail(), body('password').notEmpty()],
+  login
+);
+
+// Update password
+router.put(
+  '/update-password',
+  authenticate,
+  [
+    body('oldPassword').notEmpty(),
+    body('newPassword')
+      .isLength({ min: 8, max: 16 })
+      .matches(/[A-Z]/)
+      .matches(/[!@#$%^&*(),.?":{}|<>]/)
+  ],
+  updatePassword
+);
+
+// Get current user
+router.get('/me', authenticate, getMe);
+
+module.exports = router;
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\routes\ratingRoutes.js === 
+const express = require('express');
+const router = express.Router();
+const { authenticate, authorize } = require('../middleware/authMiddleware');
+const { submitRating, getUserRatings, getStoreOwnerRatings } = require('../controllers/ratingController');
+
+// Normal user routes
+router.post('/', authenticate, authorize('user'), submitRating);
+router.get('/my-ratings', authenticate, authorize('user'), getUserRatings);
+
+// Store Owner routes
+router.get('/store-owner', authenticate, authorize('store_owner'), getStoreOwnerRatings);
+
+module.exports = router;
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\routes\storeRoutes.js === 
+const express = require('express');
+const router = express.Router();
+const { authenticate, authorize } = require('../middleware/authMiddleware');
+const { body } = require('express-validator');
+const {
+  createStore,
+  listStores,
+  getStoresForUser,
+  rateStore,
+  getStoreForOwner, // ← updated import
+} = require('../controllers/storeController');
+
+// ===================
+// Admin routes
+// ===================
+router.post(
+  '/',
+  authenticate,
+  authorize('admin'),
+  [
+    body('name').isLength({ min: 3, max: 60 }),
+    body('email').isEmail(),
+    body('address').isLength({ max: 400 }),
+  ],
+  createStore
+);
+
+router.get('/', authenticate, authorize('admin'), listStores);
+
+// ===================
+// Normal user routes
+// ===================
+router.get('/user', authenticate, getStoresForUser);
+router.post('/:id/rate', authenticate, rateStore);
+
+// ===================
+// Store Owner route
+// ===================
+router.get('/owner', authenticate, authorize('store_owner'), getStoreForOwner);
+
+module.exports = router;
+.
+=== FILE: D:\Interview task\store-rating-application\store-rating-backend\src\utils\seedStoreOwner.js === 
+const bcrypt = require('bcrypt');
+const { User, Store, sequelize } = require('../models'); // adjust if your index.js exports sequelize
+require('dotenv').config();
+
+async function seedStoreOwner() {
+  try {
+    // Make sure DB is synced (don't drop existing tables)
+    await sequelize.sync({ force: false });
+
+    // 1️⃣ Check if store owner exists
+    let owner = await User.findOne({ where: { email: 'owner@example.com' } });
+    if (!owner) {
+      const hashedPassword = await bcrypt.hash('Owner@123', 10);
+      owner = await User.create({
+        name: 'Super Store Owner',
+        email: 'owner@example.com',
+        password: hashedPassword,
+        address: '789 Owner Street, City, Country',
+        role: 'owner', // <-- matches MySQL ENUM
+      });
+      console.log('Store owner created:', owner.name);
+    } else {
+      console.log('Store owner already exists:', owner.name);
+    }
+
+    // 2️⃣ Create stores for this owner
+    const storesData = [
+      { name: 'SuperMart', email: 'supermart@example.com', address: '456 Market Street', ownerId: owner.id },
+      { name: 'Tech Gadgets', email: 'techgadgets@example.com', address: '101 Tech Street', ownerId: owner.id },
+      { name: 'Fashion Hub', email: 'fashionhub@example.com', address: '202 Fashion Avenue', ownerId: owner.id },
+    ];
+
+    for (const storeData of storesData) {
+      const existingStore = await Store.findOne({ where: { email: storeData.email } });
+      if (!existingStore) {
+        const store = await Store.create(storeData);
+        console.log('Store created:', store.name);
+      } else {
+        console.log('Store already exists:', existingStore.name);
+      }
+    }
+
+    console.log('Seeding completed successfully!');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error seeding store owner and stores:', error);
+    process.exit(1);
+  }
+}
+
+seedStoreOwner();
+.

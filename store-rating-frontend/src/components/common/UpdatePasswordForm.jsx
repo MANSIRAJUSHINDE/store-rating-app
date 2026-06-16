@@ -2,9 +2,39 @@ import React, { useState, useContext } from "react";
 import { AuthContext } from "../../context/AuthContext";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 
+<<<<<<< HEAD
 const UpdatePasswordForm = () => {
   const { API } = useContext(AuthContext);
   const [oldPassword, setOldPassword] = useState("");
+=======
+// INPUT COMPONENT
+const InputField = ({ value, setValue, placeholder, show, setShow }) => {
+  return (
+    <div className="relative">
+      <input
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={placeholder}
+        className="w-full p-2 rounded bg-gray-800 pr-10 text-white"
+      />
+
+      <button
+        type="button"
+        onClick={() => setShow(!show)}
+        className="absolute right-2 top-2 text-gray-300"
+      >
+        {show ? <FaEyeSlash /> : <FaEye />}
+      </button>
+    </div>
+  );
+};
+
+const UpdatePasswordForm = ({ onSuccess }) => {
+  const { authHeaders } = useContext(AuthContext);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+>>>>>>> ac1d318 (Add source code files)
   const [newPassword, setNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -18,11 +48,23 @@ const UpdatePasswordForm = () => {
     setError("");
     setMessage("");
 
+<<<<<<< HEAD
     // Debug log
     console.log("Sending update password request:", {
       currentPassword: oldPassword,
       newPassword,
     });
+=======
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setMessage("All fields are required");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setMessage("Passwords do not match");
+      return;
+    }
+>>>>>>> ac1d318 (Add source code files)
 
     try {
       const res = await API.put("/auth/update-password", {
@@ -35,6 +77,12 @@ const UpdatePasswordForm = () => {
       setMessage(res.data.message || "Password updated successfully");
       setOldPassword("");
       setNewPassword("");
+<<<<<<< HEAD
+=======
+      setConfirmPassword("");
+
+      onSuccess?.();
+>>>>>>> ac1d318 (Add source code files)
     } catch (err) {
       console.error("Update password error:", err.response);
 
@@ -62,6 +110,7 @@ const UpdatePasswordForm = () => {
       {message && <p className="text-green-600 mb-3">{message}</p>}
       {error && <p className="text-red-500 mb-3">{error}</p>}
 
+<<<<<<< HEAD
       {/* Old Password */}
       <div className="mb-4 relative">
         <label className="block mb-1 text-gray-700">Old Password</label>
@@ -105,6 +154,47 @@ const UpdatePasswordForm = () => {
       >
         {loading ? "Updating..." : "Update Password"}
       </button>
+=======
+      <InputField
+        value={currentPassword}
+        setValue={setCurrentPassword}
+        placeholder="Current Password"
+        show={showCurrent}
+        setShow={setShowCurrent}
+      />
+
+      <InputField
+        value={newPassword}
+        setValue={setNewPassword}
+        placeholder="New Password"
+        show={showNew}
+        setShow={setShowNew}
+      />
+
+      <InputField
+        value={confirmPassword}
+        setValue={setConfirmPassword}
+        placeholder="Confirm Password"
+        show={showConfirm}
+        setShow={setShowConfirm}
+      />
+
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full bg-purple-600 py-2 rounded hover:bg-purple-700"
+      >
+        {loading ? "Updating..." : "Update Password"}
+      </button>
+
+      {message && (
+        <p className={`text-sm text-center mt-2 ${
+          isSuccess ? "text-green-400" : "text-red-400"
+        }`}>
+          {message}
+        </p>
+      )}
+>>>>>>> ac1d318 (Add source code files)
     </form>
   );
 };

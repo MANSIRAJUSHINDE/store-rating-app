@@ -44,8 +44,21 @@ const StoreList = () => {
         className="w-full sm:w-1/2 mb-5 px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200"
       />
 
+<<<<<<< HEAD
       {loading && <p className="text-indigo-600">Loading stores...</p>}
       {error && <p className="text-red-500">{error}</p>}
+=======
+     {/* Search */}
+<div className="bg-gray-900/80 border border-gray-700 rounded-3xl p-5 shadow-lg">
+  <input
+    type="text"
+    placeholder="Search by name or address..."
+    value={search}
+    onChange={(e) => setSearch(e.target.value)}
+    className="w-full px-5 py-3 rounded-2xl bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
+  />
+</div>
+>>>>>>> ac1d318 (Add source code files)
 
       <div className="grid xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {filteredStores.length > 0 ? (

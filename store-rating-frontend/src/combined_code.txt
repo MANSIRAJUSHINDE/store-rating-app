@@ -1,0 +1,3793 @@
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\services\api.js === 
+// src/services/api.js
+
+import axios from "axios";
+
+// Create Axios Instance
+const API = axios.create({
+  baseURL: `${import.meta.env.VITE_BACKEND_URL}/api`,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+// Automatically attach token before every request
+API.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Handle unauthorized responses globally
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+
+      // Optional auto redirect
+      window.location.href = "/login";
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+// Helper to manually set/remove token
+export const setToken = (token) => {
+  if (token) {
+    localStorage.setItem("token", token);
+
+    API.defaults.headers.common[
+      "Authorization"
+    ] = `Bearer ${token}`;
+  } else {
+    localStorage.removeItem("token");
+
+    delete API.defaults.headers.common["Authorization"];
+  }
+};
+
+export default API;
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\App.jsx === 
+// src/App.jsx
+import React, { useState } from "react";
+import { Routes, Route } from "react-router-dom";
+
+import GetStartedPage from "./pages/GetStartedPage";
+import LoginPage from "./pages/LoginPage";
+import SignupPage from "./pages/SignupPage";
+import AdminDashboard from "./pages/AdminDashboard";
+import OwnerDashboard from "./pages/OwnerDashboard";
+import UserDashboard from "./pages/UserDashboard";
+
+import ProtectedRoute from "./components/common/ProtectedRoute";
+import UpdatePasswordForm from "./components/common/UpdatePasswordForm";
+
+const App = () => {
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+  return (
+    <>
+      <Routes>
+        <Route path="/" element={<GetStartedPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+
+        {/* ADMIN DASHBOARD */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <AdminDashboard onOpenPassword={() => setShowPasswordModal(true)} />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* OWNER DASHBOARD */}
+        <Route
+          path="/owner"
+          element={
+            <ProtectedRoute roles={["store_owner"]}>
+              <OwnerDashboard onOpenPassword={() => setShowPasswordModal(true)} />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* USER DASHBOARD (FIXED ROLE CAPTURE) */}
+        <Route
+          path="/user"
+          element={
+            <ProtectedRoute roles={["normal"]}>
+              <UserDashboard onOpenPassword={() => setShowPasswordModal(true)} />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+
+      {/* GLOBAL PASSWORD MODAL */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-[999] bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[#0b1220] p-6 rounded-2xl relative">
+            <button
+              onClick={() => setShowPasswordModal(false)}
+              className="absolute top-3 right-3 text-white text-xl"
+            >
+              ✕
+            </button>
+            <UpdatePasswordForm />
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+export default App;
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\main.jsx === 
+// src/main.jsx
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter as Router } from "react-router-dom";
+import App from "./App";
+import { AuthProvider } from "./context/AuthContext";
+import "./index.css";
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <Router>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </Router>
+  </React.StrictMode>
+);
+
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\admin\AddStoreForm.jsx === 
+// src/components/admin/AddStoreForm.jsx
+
+import React, { useState, useEffect, useContext } from "react";
+import API from "../../services/api";
+import { AuthContext } from "../../context/AuthContext";
+
+const AddStoreForm = ({ refresh }) => {
+  const { authHeaders } = useContext(AuthContext);
+
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    address: "",
+    ownerId: "", // will auto set
+  });
+
+  const [error, setError] = useState("");
+  const [owners, setOwners] = useState([]);
+
+  useEffect(() => {
+    const fetchOwners = async () => {
+      try {
+        const res = await API.get("/admin/users", {
+          headers: authHeaders(),
+        });
+
+        const storeOwners = res.data.users.filter(
+          (u) => u.role === "store_owner"
+        );
+
+        setOwners(storeOwners);
+
+        // ✅ AUTO-SELECT FIRST OWNER (NO REQUIRED DROPDOWN)
+        if (storeOwners.length > 0) {
+          setForm((prev) => ({
+            ...prev,
+            ownerId: storeOwners[0].id,
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to fetch owners:", err.response || err);
+      }
+    };
+
+    fetchOwners();
+  }, [authHeaders]);
+
+  const handleChange = (e) =>
+    setForm({
+      ...form,
+      [e.target.name]: e.target.value,
+    });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+      await API.post("/admin/stores", form, {
+        headers: authHeaders(),
+      });
+
+      setForm({
+        name: "",
+        email: "",
+        address: "",
+        ownerId: owners[0]?.id || "",
+      });
+
+      setError("");
+      refresh();
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.message || "Failed to add store");
+    }
+  };
+
+  return (
+    <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_0_40px_rgba(139,92,246,0.15)] p-6 sm:p-8">
+
+      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-pink-500/10 pointer-events-none" />
+
+      <form onSubmit={handleSubmit} className="relative space-y-5">
+
+        {error && (
+          <div className="bg-red-500/10 border border-red-400/20 text-red-300 px-4 py-3 rounded-2xl text-sm">
+            {error}
+          </div>
+        )}
+
+        <input
+          name="name"
+          placeholder="Store Name"
+          value={form.name}
+          onChange={handleChange}
+          required
+          className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-white placeholder:text-gray-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30"
+        />
+
+        <input
+          name="email"
+          placeholder="Store Email"
+          value={form.email}
+          onChange={handleChange}
+          required
+          className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-white placeholder:text-gray-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30"
+        />
+
+        <input
+          name="address"
+          placeholder="Store Address"
+          value={form.address}
+          onChange={handleChange}
+          required
+          className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-white placeholder:text-gray-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30"
+        />
+
+        {/* ✅ FIXED OWNER DISPLAY (NO DROPDOWN) */}
+        <div className="w-full rounded-2xl bg-[#0f172a] border border-white/10 px-5 py-4 text-gray-300">
+          Store Owner:{" "}
+          <span className="text-indigo-400 font-semibold">
+            {owners[0]?.name || "Loading..."}
+          </span>
+        </div>
+
+        <button
+          type="submit"
+          disabled={!form.ownerId}
+          className="w-full rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 py-4 font-semibold text-white shadow-lg shadow-purple-500/30 transition-all duration-300 hover:scale-[1.02] hover:shadow-purple-500/50"
+        >
+          Add Store
+        </button>
+      </form>
+    </div>
+  );
+};
+
+export default AddStoreForm;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\admin\AddUserForm.jsx === 
+// src/components/admin/AddUserForm.jsx
+
+import React, { useState, useContext } from "react";
+import API from "../../services/api";
+import { AuthContext } from "../../context/AuthContext";
+
+const AddUserForm = ({ onUserAdded }) => {
+  const { authHeaders } = useContext(AuthContext);
+
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    address: "",
+    password: "",
+    role: "normal", // ✅ fixed role
+  });
+
+  const [error, setError] = useState("");
+
+  const handleChange = (e) =>
+    setForm({
+      ...form,
+      [e.target.name]: e.target.value,
+    });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+      await API.post(
+        "/admin/users",
+        {
+          ...form,
+          role: "normal", // ✅ force normal user always
+        },
+        {
+          headers: authHeaders(),
+        }
+      );
+
+      setForm({
+        name: "",
+        email: "",
+        address: "",
+        password: "",
+        role: "normal",
+      });
+
+      setError("");
+      onUserAdded();
+    } catch (err) {
+      console.error(err.response || err);
+
+      setError(
+        err.response?.data?.message || "Failed to add user"
+      );
+    }
+  };
+
+  return (
+    <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_0_40px_rgba(139,92,246,0.15)] p-6 sm:p-8">
+
+      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-pink-500/10 pointer-events-none" />
+
+      <form onSubmit={handleSubmit} className="relative space-y-5">
+
+        {error && (
+          <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        <input
+          name="name"
+          placeholder="Name"
+          value={form.name}
+          onChange={handleChange}
+          required
+          className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-white placeholder:text-gray-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30"
+        />
+
+        <input
+          name="email"
+          placeholder="Email"
+          value={form.email}
+          onChange={handleChange}
+          required
+          className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-white placeholder:text-gray-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30"
+        />
+
+        <input
+          name="address"
+          placeholder="Address"
+          value={form.address}
+          onChange={handleChange}
+          required
+          className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-white placeholder:text-gray-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30"
+        />
+
+        <input
+          name="password"
+          type="password"
+          placeholder="Password"
+          value={form.password}
+          onChange={handleChange}
+          required
+          className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-white placeholder:text-gray-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30"
+        />
+
+        {/* ✅ FIXED ROLE (NO DROPDOWN) */}
+        <div className="w-full rounded-2xl bg-[#0f172a] border border-white/10 px-5 py-4 text-gray-300">
+          Role: <span className="text-indigo-400 font-semibold">Normal User</span>
+        </div>
+
+        <button
+          type="submit"
+          className="w-full rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 py-4 font-semibold text-white shadow-lg shadow-purple-500/30 transition-all duration-300 hover:scale-[1.02] hover:shadow-purple-500/50"
+        >
+          Add User
+        </button>
+      </form>
+    </div>
+  );
+};
+
+export default AddUserForm;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\admin\AdminCharts.jsx === 
+import React from "react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
+
+const COLORS = ["#6366f1", "#a855f7", "#22c55e", "#f59e0b"];
+
+const AdminCharts = ({ stats }) => {
+  if (!stats) return null;
+
+  // 🔥 ONLY REAL DATA FROM API (NO DUMMY)
+  const pieData = [
+    { name: "Users", value: stats.totalUsers || 0 },
+    { name: "Stores", value: stats.totalStores || 0 },
+    { name: "Ratings", value: stats.totalRatings || 0 },
+  ];
+
+  const barData = [
+    { name: "Users", count: stats.totalUsers || 0 },
+    { name: "Stores", count: stats.totalStores || 0 },
+    { name: "Active", count: stats.activeStores || 0 },
+    { name: "Inactive", count: stats.inactiveStores || 0 },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+
+      {/* PIE CHART */}
+      <div className="bg-white/10 p-6 rounded-3xl border border-white/10">
+        <h2 className="text-xl font-bold mb-4">Distribution</h2>
+
+        <ResponsiveContainer width="100%" height={300}>
+          <PieChart>
+            <Pie data={pieData} dataKey="value" outerRadius={100} label>
+              {pieData.map((_, i) => (
+                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip />
+            <Legend />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* BAR CHART */}
+      <div className="bg-white/10 p-6 rounded-3xl border border-white/10">
+        <h2 className="text-xl font-bold mb-4">Metrics</h2>
+
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={barData}>
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey="count" fill="#6366f1" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+    </div>
+  );
+};
+
+export default AdminCharts;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\admin\AdminStats.jsx === 
+// src/components/admin/AdminStats.jsx
+
+import React from "react";
+import {
+  FaUsers,
+  FaStore,
+  FaStarHalfAlt,
+} from "react-icons/fa";
+
+const AdminStats = ({ stats }) => {
+  if (!stats) {
+    return (
+      <div className="flex items-center justify-center py-14">
+        <p className="text-lg text-gray-400 animate-pulse">
+          Loading stats...
+        </p>
+      </div>
+    );
+  }
+
+  const cards = [
+    {
+      title: "Total Users",
+      value: stats.totalUsers,
+      icon: <FaUsers />,
+      gradient:
+        "from-blue-500 via-indigo-500 to-purple-500",
+      glow:
+        "shadow-[0_0_35px_rgba(99,102,241,0.35)]",
+    },
+    {
+      title: "Total Stores",
+      value: stats.totalStores,
+      icon: <FaStore />,
+      gradient:
+        "from-emerald-500 via-green-500 to-teal-500",
+      glow:
+        "shadow-[0_0_35px_rgba(16,185,129,0.35)]",
+    },
+    {
+      title: "Total Ratings",
+      value: stats.totalRatings,
+      icon: <FaStarHalfAlt />,
+      gradient:
+        "from-pink-500 via-purple-500 to-indigo-500",
+      glow:
+        "shadow-[0_0_35px_rgba(236,72,153,0.35)]",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-3 mt-8">
+
+      {cards.map((card, index) => (
+        <div
+          key={index}
+          className={`group relative overflow-hidden rounded-[30px] border border-white/10 bg-white/5 backdrop-blur-xl p-6 transition-all duration-500 hover:-translate-y-2 hover:scale-[1.02] ${card.glow}`}
+        >
+          
+          {/* Background Glow */}
+          <div
+            className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-10 group-hover:opacity-20 transition-opacity duration-500`}
+          />
+
+          {/* Top Blur Circle */}
+          <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-white/10 blur-3xl" />
+
+          <div className="relative flex items-center justify-between">
+
+            {/* Text Content */}
+            <div>
+              <p className="text-sm uppercase tracking-widest text-gray-400">
+                {card.title}
+              </p>
+
+              <h2 className="mt-3 text-4xl font-extrabold text-white">
+                {card.value}
+              </h2>
+            </div>
+
+            {/* Icon */}
+            <div
+              className={`flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${card.gradient} text-3xl text-white shadow-xl`}
+            >
+              {card.icon}
+            </div>
+          </div>
+
+          {/* Bottom Shine */}
+          <div className="absolute bottom-0 left-0 h-[2px] w-full bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export default AdminStats;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\admin\StoreDetailsModal.jsx === 
+// src/components/admin/StoreDetailsModal.jsx
+
+import React, {
+  useEffect,
+  useState,
+  useContext,
+} from "react";
+
+import { AuthContext } from "../../context/AuthContext";
+import axios from "axios";
+
+import {
+  FaStar,
+  FaStore,
+  FaUser,
+  FaEnvelope,
+  FaMapMarkerAlt,
+} from "react-icons/fa";
+
+const StoreDetailsModal = ({
+  storeId,
+  onClose,
+}) => {
+  const { authHeaders, logout } =
+    useContext(AuthContext);
+
+  const [store, setStore] = useState(null);
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchStoreDetails = async () => {
+      if (!storeId) return;
+
+      setLoading(true);
+      setError("");
+
+      try {
+        const headers = authHeaders();
+
+        const res = await axios.get(
+          `http://localhost:5000/api/admin/stores/${storeId}`,
+          { headers }
+        );
+
+        setStore(res.data);
+      } catch (err) {
+        if (err.response?.status === 401) {
+          logout();
+          setError(
+            "Session expired. Please login again."
+          );
+        } else {
+          setError(
+            err.response?.data?.message ||
+              "Failed to load store details"
+          );
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStoreDetails();
+  }, [storeId, authHeaders, logout]);
+
+  if (!storeId) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+
+      {/* Modal */}
+      <div className="relative w-full max-w-lg overflow-hidden rounded-[32px] border border-white/10 bg-[#0f172a]/90 backdrop-blur-2xl shadow-[0_0_50px_rgba(139,92,246,0.25)]">
+
+        {/* Glow */}
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-pink-500/10 pointer-events-none" />
+
+        {/* Header */}
+        <div className="relative flex items-center justify-between border-b border-white/10 px-6 py-5">
+          <h2 className="flex items-center gap-3 text-2xl font-bold text-white">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 shadow-lg">
+              <FaStore className="text-white text-xl" />
+            </div>
+
+            Store Details
+          </h2>
+
+          <button
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-all duration-300 hover:bg-red-500/30 hover:rotate-90"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="relative p-6">
+
+          {loading ? (
+            <div className="py-14 text-center text-lg text-gray-300 animate-pulse">
+              Loading...
+            </div>
+          ) : error ? (
+            <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-4 text-center text-red-300">
+              {error}
+            </div>
+          ) : (
+            <div className="space-y-5">
+
+              {/* Card */}
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl shadow-inner">
+
+                <div className="space-y-5">
+
+                  {/* Name */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-400">
+                      <FaStore />
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-gray-400">
+                        Store Name
+                      </p>
+
+                      <h3 className="text-lg font-semibold text-white">
+                        {store.name}
+                      </h3>
+                    </div>
+                  </div>
+
+                  {/* Owner */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-500/20 text-green-400">
+                      <FaUser />
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-gray-400">
+                        Owner ID
+                      </p>
+
+                      <p className="text-white">
+                        {store.ownerId}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Email */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-pink-500/20 text-pink-400">
+                      <FaEnvelope />
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-gray-400">
+                        Email
+                      </p>
+
+                      <p className="text-white break-all">
+                        {store.email}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Address */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-yellow-500/20 text-yellow-400">
+                      <FaMapMarkerAlt />
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-gray-400">
+                        Address
+                      </p>
+
+                      <p className="text-white">
+                        {store.address}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Rating */}
+                  <div className="flex items-center justify-between rounded-2xl border border-yellow-400/20 bg-yellow-500/10 px-5 py-4">
+                    <div className="flex items-center gap-3">
+                      <FaStar className="text-yellow-400 text-xl" />
+
+                      <span className="text-gray-300">
+                        Average Rating
+                      </span>
+                    </div>
+
+                    <span className="text-2xl font-bold text-yellow-400">
+                      {store.averageRating ?? 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Close Button */}
+              <button
+                onClick={onClose}
+                className="w-full rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 py-4 font-semibold text-white shadow-lg shadow-purple-500/30 transition-all duration-300 hover:scale-[1.02] hover:shadow-purple-500/50"
+              >
+                Close
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default StoreDetailsModal;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\admin\StoreRatingsModal.jsx === 
+// src/components/admin/StoreRatingsModal.jsx
+
+import React, {
+  useEffect,
+  useState,
+  useContext,
+} from "react";
+
+import axios from "axios";
+
+import { AuthContext } from "../../context/AuthContext";
+
+import {
+  FaStar,
+  FaUser,
+  FaClock,
+} from "react-icons/fa";
+
+const StoreRatingsModal = ({
+  storeId,
+  onClose,
+}) => {
+  const { authHeaders, logout } =
+    useContext(AuthContext);
+
+  const [ratings, setRatings] = useState([]);
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchRatings = async () => {
+      setLoading(true);
+      setError("");
+
+      try {
+        const headers = authHeaders();
+
+        const res = await axios.get(
+          `http://localhost:5000/api/admin/stores/${storeId}/ratings`,
+          { headers }
+        );
+
+        setRatings(res.data.ratings || []);
+      } catch (err) {
+        if (err.response?.status === 401) {
+          logout();
+        }
+
+        setError(
+          err.response?.data?.message ||
+            "Failed to load ratings"
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (storeId) {
+      fetchRatings();
+    }
+  }, [storeId, authHeaders, logout]);
+
+  if (!storeId) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+
+      {/* Modal */}
+      <div className="relative w-full max-w-2xl overflow-hidden rounded-[32px] border border-white/10 bg-[#0f172a]/90 backdrop-blur-2xl shadow-[0_0_50px_rgba(139,92,246,0.25)]">
+
+        {/* Glow */}
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-pink-500/10 pointer-events-none" />
+
+        {/* Header */}
+        <div className="relative flex items-center justify-between border-b border-white/10 px-6 py-5">
+          <h2 className="flex items-center gap-3 text-2xl font-bold text-white">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 shadow-lg">
+              <FaStar className="text-white text-xl" />
+            </div>
+
+            Store Ratings
+          </h2>
+
+          <button
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-all duration-300 hover:bg-red-500/30 hover:rotate-90"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="relative max-h-[75vh] overflow-y-auto p-6">
+
+          {loading ? (
+            <div className="py-14 text-center text-lg text-gray-300 animate-pulse">
+              Loading ratings...
+            </div>
+          ) : error ? (
+            <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-4 text-center text-red-300">
+              {error}
+            </div>
+          ) : ratings.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-10 text-center text-gray-400">
+              No ratings found.
+            </div>
+          ) : (
+            <div className="space-y-4">
+
+              {ratings.map((r) => (
+                <div
+                  key={r.id}
+                  className="group rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl transition-all duration-300 hover:border-purple-400/30 hover:bg-white/10 hover:shadow-[0_0_25px_rgba(139,92,246,0.15)]"
+                >
+
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+                    {/* Left */}
+                    <div className="flex items-center gap-4">
+
+                      {/* Avatar */}
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg">
+                        <FaUser className="text-xl" />
+                      </div>
+
+                      {/* User Info */}
+                      <div>
+                        <h3 className="text-lg font-semibold text-white">
+                          {r.userName}
+                        </h3>
+
+                        <div className="mt-1 flex items-center gap-2 text-yellow-400">
+                          <FaStar />
+
+                          <span className="font-semibold">
+                            {r.rating}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Date */}
+                    <div className="flex items-center gap-2 text-sm text-gray-400">
+                      <FaClock />
+
+                      <span>
+                        {r.createdAt
+                          ? new Intl.DateTimeFormat(
+                              "en-GB",
+                              {
+                                year: "numeric",
+                                month: "short",
+                                day: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }
+                            ).format(
+                              new Date(r.createdAt)
+                            )
+                          : "N/A"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Footer Button */}
+          <div className="mt-6">
+            <button
+              onClick={onClose}
+              className="w-full rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 py-4 font-semibold text-white shadow-lg shadow-purple-500/30 transition-all duration-300 hover:scale-[1.02] hover:shadow-purple-500/50"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default StoreRatingsModal;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\admin\StoreTable.jsx === 
+// src/components/admin/StoreTable.jsx
+
+import React, { useState } from "react";
+import StoreDetailsModal from "./StoreDetailsModal";
+import StoreRatingsModal from "./StoreRatingsModal";
+
+const StoreTable = ({ stores = [] }) => {
+  const [filter, setFilter] = useState("");
+  const [sortField, setSortField] = useState("");
+  const [sortOrder, setSortOrder] = useState("asc");
+
+  const [selectedStoreId, setSelectedStoreId] = useState(null);
+  const [selectedRatingsStoreId, setSelectedRatingsStoreId] = useState(null);
+
+  const safeStores = Array.isArray(stores) ? stores : [];
+
+  const filteredStores = safeStores.filter(
+    (s) =>
+      s.name?.toLowerCase().includes(filter.toLowerCase()) ||
+      s.email?.toLowerCase().includes(filter.toLowerCase()) ||
+      s.address?.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  const sortedStores = [...filteredStores].sort((a, b) => {
+    if (!sortField) return 0;
+
+    let valA = a[sortField];
+    let valB = b[sortField];
+
+    valA = valA?.toString().toLowerCase() || "";
+    valB = valB?.toString().toLowerCase() || "";
+
+    if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+    if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
+
+  return (
+    <div className="w-full mt-8 text-white">
+
+      {/* HEADER (same as UserTable) */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+
+        <h2 className="text-2xl font-bold text-white/90">
+          Stores Management
+        </h2>
+
+        {/* SEARCH */}
+        <div className="relative w-full sm:w-80">
+
+          <input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Search stores..."
+            className="w-full bg-[#0b1220] border border-white/10 rounded-2xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+
+        </div>
+      </div>
+
+      {/* TABLE CONTAINER (EXACT SAME STYLE) */}
+      <div className="overflow-x-auto rounded-3xl border border-white/10 bg-[#0b1220]/80 backdrop-blur-xl shadow-[0_0_50px_rgba(99,102,241,0.10)]">
+
+        <table className="min-w-full text-sm text-left text-gray-300">
+
+          {/* HEADER */}
+          <thead className="bg-[#111827] border-b border-white/10 text-gray-200">
+
+            <tr>
+              {["name", "email", "address", "averageRating", "actions"].map((field) => (
+                <th
+                  key={field}
+                  onClick={() => field !== "actions" && handleSort(field)}
+                  className={`px-6 py-4 font-semibold ${
+                    field !== "actions"
+                      ? "cursor-pointer hover:text-indigo-400"
+                      : ""
+                  }`}
+                >
+                  {field === "averageRating"
+                    ? "Rating"
+                    : field.charAt(0).toUpperCase() + field.slice(1)}
+
+                  {sortField === field &&
+                    field !== "actions" &&
+                    (sortOrder === "asc" ? " ↑" : " ↓")}
+                </th>
+              ))}
+            </tr>
+
+          </thead>
+
+          {/* BODY */}
+          <tbody>
+
+            {sortedStores.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="text-center py-10 text-gray-500">
+                  No stores found
+                </td>
+              </tr>
+            ) : (
+              sortedStores.map((s) => (
+                <tr
+                  key={s.id}
+                  className="border-b border-white/5 hover:bg-[#111827]/60 transition"
+                >
+
+                  {/* NAME */}
+                  <td className="px-6 py-4">
+                    <span className="text-white/90 font-medium">
+                      {s.name}
+                    </span>
+                  </td>
+
+                  {/* EMAIL */}
+                  <td className="px-6 py-4 text-gray-400">
+                    {s.email}
+                  </td>
+
+                  {/* ADDRESS */}
+                  <td className="px-6 py-4 text-gray-400">
+                    {s.address}
+                  </td>
+
+                  {/* RATING */}
+                  <td className="px-6 py-4 text-yellow-400 flex items-center gap-2">
+                    ⭐ {s.averageRating ?? 0}
+                  </td>
+
+                  {/* ACTIONS */}
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+
+                      <button
+                        onClick={() => setSelectedStoreId(s.id)}
+                        className="px-4 py-2 rounded-xl bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition flex items-center gap-2"
+                      >
+                        View
+                      </button>
+
+                      <button
+                        onClick={() => setSelectedRatingsStoreId(s.id)}
+                        className="px-4 py-2 rounded-xl bg-green-500/20 text-green-300 hover:bg-green-500/30 transition flex items-center gap-2"
+                      >
+                        Ratings
+                      </button>
+
+                    </div>
+                  </td>
+
+                </tr>
+              ))
+            )}
+
+          </tbody>
+
+        </table>
+      </div>
+
+      {/* MODALS */}
+      {selectedStoreId && (
+        <StoreDetailsModal
+          storeId={selectedStoreId}
+          onClose={() => setSelectedStoreId(null)}
+        />
+      )}
+
+      {selectedRatingsStoreId && (
+        <StoreRatingsModal
+          storeId={selectedRatingsStoreId}
+          onClose={() => setSelectedRatingsStoreId(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+export default StoreTable;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\admin\UserDetailsModal.jsx === 
+// src/components/admin/UserDetailsModal.jsx
+
+import React, {
+  useEffect,
+  useState,
+  useContext,
+} from "react";
+
+import { AuthContext } from "../../context/AuthContext";
+import API from "../../services/api";
+
+import {
+  FaUser,
+  FaStar,
+  FaStore,
+  FaEnvelope,
+  FaMapMarkerAlt,
+  FaUserShield,
+} from "react-icons/fa";
+
+const UserDetailsModal = ({
+  userId,
+  onClose,
+}) => {
+  const { authHeaders } =
+    useContext(AuthContext);
+
+  const [user, setUser] = useState(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchUserDetails = async () => {
+      try {
+        setLoading(true);
+
+        const headers = authHeaders();
+
+        const res = await API.get(
+          `/admin/users/${userId}`,
+          { headers }
+        );
+
+        setUser(res.data);
+      } catch (err) {
+        setError(
+          err.response?.data?.message ||
+            "Failed to load user details"
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (userId) {
+      fetchUserDetails();
+    }
+  }, [userId, authHeaders]);
+
+  if (!userId) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+
+      {/* Modal */}
+      <div className="relative w-full max-w-2xl overflow-hidden rounded-[32px] border border-white/10 bg-[#0f172a]/90 backdrop-blur-2xl shadow-[0_0_50px_rgba(139,92,246,0.25)]">
+
+        {/* Glow */}
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-pink-500/10 pointer-events-none" />
+
+        {/* Header */}
+        <div className="relative flex items-center justify-between border-b border-white/10 px-6 py-5">
+
+          <h2 className="flex items-center gap-3 text-2xl font-bold text-white">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 shadow-lg">
+              <FaUser className="text-white text-xl" />
+            </div>
+
+            User Details
+          </h2>
+
+          <button
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-all duration-300 hover:bg-red-500/30 hover:rotate-90"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="relative max-h-[80vh] overflow-y-auto p-6">
+
+          {loading ? (
+            <div className="py-14 text-center text-lg text-gray-300 animate-pulse">
+              Loading...
+            </div>
+          ) : error ? (
+            <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-4 text-center text-red-300">
+              {error}
+            </div>
+          ) : (
+            <div className="space-y-6">
+
+              {/* User Card */}
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+
+                <div className="space-y-5">
+
+                  {/* Name */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-400">
+                      <FaUser />
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-gray-400">
+                        Full Name
+                      </p>
+
+                      <h3 className="text-lg font-semibold text-white">
+                        {user.name}
+                      </h3>
+                    </div>
+                  </div>
+
+                  {/* Email */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-pink-500/20 text-pink-400">
+                      <FaEnvelope />
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-gray-400">
+                        Email
+                      </p>
+
+                      <p className="text-white break-all">
+                        {user.email}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Address */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-yellow-500/20 text-yellow-400">
+                      <FaMapMarkerAlt />
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-gray-400">
+                        Address
+                      </p>
+
+                      <p className="text-white">
+                        {user.address}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Role */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-500/20 text-green-400">
+                      <FaUserShield />
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-gray-400">
+                        Role
+                      </p>
+
+                      <span
+                        className={`inline-block rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide text-white ${
+                          user.role === "admin"
+                            ? "bg-red-500"
+                            : user.role ===
+                              "store_owner"
+                            ? "bg-green-500"
+                            : "bg-blue-500"
+                        }`}
+                      >
+                        {user.role.replace(
+                          "_",
+                          " "
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Store Owner Section */}
+              {user.role ===
+                "store_owner" && (
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+
+                  {/* Rating */}
+                  <div className="mb-6 flex items-center justify-between rounded-2xl border border-yellow-400/20 bg-yellow-500/10 px-5 py-4">
+
+                    <div className="flex items-center gap-3">
+                      <FaStar className="text-yellow-400 text-xl" />
+
+                      <span className="text-gray-300">
+                        Average Store Rating
+                      </span>
+                    </div>
+
+                    <span className="text-2xl font-bold text-yellow-400">
+                      {user.storeRating ??
+                        0}
+                    </span>
+                  </div>
+
+                  {/* Stores */}
+                  <h3 className="mb-4 flex items-center gap-3 text-xl font-semibold text-white">
+                    <FaStore className="text-indigo-400" />
+
+                    Stores Owned
+                  </h3>
+
+                  <div className="space-y-3">
+
+                    {user.storesOwned?.map(
+                      (store) => (
+                        <div
+                          key={store.id}
+                          className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-5 py-4 transition-all duration-300 hover:bg-white/10"
+                        >
+
+                          <div>
+                            <p className="font-semibold text-white">
+                              {store.name}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2 rounded-xl bg-yellow-500/10 px-3 py-2 text-yellow-400 font-bold">
+                            <FaStar />
+
+                            {store.averageRating ??
+                              0}
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Footer */}
+              <button
+                onClick={onClose}
+                className="w-full rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 py-4 font-semibold text-white shadow-lg shadow-purple-500/30 transition-all duration-300 hover:scale-[1.02] hover:shadow-purple-500/50"
+              >
+                Close
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default UserDetailsModal;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\admin\UserTable.jsx === 
+import React, { useState } from "react";
+import { FaSearch, FaUser, FaStar, FaEye } from "react-icons/fa";
+
+const UserTable = ({ users = [], onViewDetails }) => {
+  const [filter, setFilter] = useState("");
+  const [sortField, setSortField] = useState("");
+  const [sortOrder, setSortOrder] = useState("asc");
+
+  const safeUsers = Array.isArray(users) ? users : [];
+
+  const filteredUsers = safeUsers.filter(
+    (u) =>
+      u.name?.toLowerCase().includes(filter.toLowerCase()) ||
+      u.email?.toLowerCase().includes(filter.toLowerCase()) ||
+      u.address?.toLowerCase().includes(filter.toLowerCase()) ||
+      u.role?.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    if (!sortField) return 0;
+
+    let valA = a[sortField];
+    let valB = b[sortField];
+
+    valA = valA?.toString().toLowerCase() || "";
+    valB = valB?.toString().toLowerCase() || "";
+
+    if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+    if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
+
+  return (
+    <div className="w-full mt-8 text-white">
+
+      {/* HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+
+        <h2 className="text-2xl font-bold text-white/90">
+          Users Management
+        </h2>
+
+        {/* SEARCH */}
+        <div className="relative w-full sm:w-80">
+          <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+
+          <input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Search users..."
+            className="w-full bg-[#0b1220] border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+      </div>
+
+      {/* TABLE CONTAINER */}
+      <div className="overflow-x-auto rounded-3xl border border-white/10 bg-[#0b1220]/80 backdrop-blur-xl shadow-[0_0_50px_rgba(99,102,241,0.10)]">
+
+        <table className="min-w-full text-sm text-left text-gray-300">
+
+          {/* HEADER */}
+          <thead className="bg-[#111827] border-b border-white/10 text-gray-200">
+            <tr>
+              {["name", "email", "address", "role", "averageRating", "actions"].map((field) => (
+                <th
+                  key={field}
+                  onClick={() => field !== "actions" && handleSort(field)}
+                  className={`px-6 py-4 font-semibold ${
+                    field !== "actions"
+                      ? "cursor-pointer hover:text-indigo-400"
+                      : ""
+                  }`}
+                >
+                  {field === "averageRating"
+                    ? "Rating"
+                    : field.charAt(0).toUpperCase() + field.slice(1)}
+
+                  {sortField === field &&
+                    field !== "actions" &&
+                    (sortOrder === "asc" ? " ↑" : " ↓")}
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          {/* BODY */}
+          <tbody>
+            {sortedUsers.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-10 text-gray-500">
+                  No users found
+                </td>
+              </tr>
+            ) : (
+              sortedUsers.map((u, index) => (
+                <tr
+                  key={u.id}
+                  className="border-b border-white/5 hover:bg-[#111827]/60 transition"
+                >
+
+                  {/* NAME */}
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-300">
+                        <FaUser />
+                      </div>
+                      <span className="text-white/90 font-medium">
+                        {u.name}
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* EMAIL */}
+                  <td className="px-6 py-4 text-gray-400">
+                    {u.email}
+                  </td>
+
+                  {/* ADDRESS */}
+                  <td className="px-6 py-4 text-gray-400">
+                    {u.address}
+                  </td>
+
+                  {/* ROLE */}
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-xs border
+                      ${u.role === "admin"
+                        ? "bg-red-500/10 text-red-300 border-red-500/20"
+                        : u.role === "store_owner"
+                        ? "bg-green-500/10 text-green-300 border-green-500/20"
+                        : "bg-blue-500/10 text-blue-300 border-blue-500/20"
+                      }`}
+                    >
+                      {u.role?.replace("_", " ").toUpperCase()}
+                    </span>
+                  </td>
+
+                  {/* RATING */}
+                  <td className="px-6 py-4 text-yellow-400 flex items-center gap-2">
+                    <FaStar />
+                    {u.averageRating ?? 0}
+                  </td>
+
+                  {/* ACTION */}
+                  <td className="px-6 py-4">
+                    <button
+                      onClick={() => onViewDetails(u.id)}
+                      className="px-4 py-2 rounded-xl bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition flex items-center gap-2"
+                    >
+                      <FaEye />
+                      View
+                    </button>
+                  </td>
+
+                </tr>
+              ))
+            )}
+          </tbody>
+
+        </table>
+      </div>
+    </div>
+  );
+};
+
+export default UserTable;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\auth\LoginForm.jsx === 
+import React, { useState, useContext } from "react";
+import { AuthContext } from "../../context/AuthContext";
+import { FaEnvelope, FaLock, FaArrowRight } from "react-icons/fa";
+
+const LoginForm = () => {
+  const { login } = useContext(AuthContext);
+
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
+
+  const [error, setError] = useState("");
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    try {
+      await login(formData.email, formData.password);
+    } catch (err) {
+      setError(err.response?.data?.message || "Login failed");
+    }
+  };
+
+  const DemoBox = () => (
+    <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-xl">
+      <h3 className="text-white font-semibold text-lg mb-4">
+        Demo Credentials
+      </h3>
+
+      <div className="space-y-4 text-sm">
+
+        <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+          <p className="text-indigo-300 font-medium">Admin</p>
+          <p className="text-gray-300 break-all">admin@example.com</p>
+          <p className="text-gray-400">Admin@123</p>
+        </div>
+
+        <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+          <p className="text-purple-300 font-medium">Store Owner</p>
+          <p className="text-gray-300 break-all">owner@example.com</p>
+          <p className="text-gray-400">Owner@123</p>
+        </div>
+
+        <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+          <p className="text-pink-300 font-medium">User</p>
+          <p className="text-gray-300 break-all">user1@gmail.com</p>
+          <p className="text-gray-400">User@123</p>
+        </div>
+
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="w-full max-w-[85vw] mx-auto py-10">
+
+      {/* MAIN GRID */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
+
+        {/* LOGIN FORM */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-8 backdrop-blur-xl">
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-300 px-3 py-2 rounded-xl text-sm mb-4">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+
+            {/* EMAIL */}
+            <div className="relative">
+              <FaEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+              <input
+                type="email"
+                name="email"
+                placeholder="Email"
+                value={formData.email}
+                onChange={handleChange}
+                className="w-full bg-black/20 border border-white/10 rounded-xl py-4 pl-10 pr-3 text-white text-sm"
+                required
+              />
+            </div>
+
+            {/* PASSWORD */}
+            <div className="relative">
+              <FaLock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+              <input
+                type="password"
+                name="password"
+                placeholder="Password"
+                value={formData.password}
+                onChange={handleChange}
+                className="w-full bg-black/20 border border-white/10 rounded-xl py-4 pl-10 pr-3 text-white text-sm"
+                required
+              />
+            </div>
+
+            {/* BUTTON */}
+            <button
+              type="submit"
+              className="w-full py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold text-sm flex items-center justify-center gap-2"
+            >
+              Login <FaArrowRight />
+            </button>
+
+          </form>
+        </div>
+
+        {/* DEMO BOX */}
+        <div>
+          <DemoBox />
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+export default LoginForm;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\auth\SignupForm.jsx === 
+// src/components/auth/SignupForm.jsx
+import React, { useState, useContext } from "react";
+import { AuthContext } from "../../context/AuthContext";
+import { Link, useNavigate } from "react-router-dom";
+
+import {
+  FaUser,
+  FaEnvelope,
+  FaLock,
+  FaMapMarkerAlt,
+  FaArrowRight,
+} from "react-icons/fa";
+
+const SignupForm = () => {
+  const { signup } = useContext(AuthContext);
+  const navigate = useNavigate();
+
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    address: "",
+    role: "normal",
+  });
+
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    setError("");
+    setSuccess("");
+
+    try {
+      await signup(
+        formData.name,
+        formData.email,
+        formData.password,
+        formData.address,
+        formData.role
+      );
+
+      setSuccess(
+        "Signup successful! Redirecting to login..."
+      );
+
+      setFormData({
+        name: "",
+        email: "",
+        password: "",
+        address: "",
+        role: "normal",
+      });
+
+      setTimeout(() => {
+        navigate("/login");
+      }, 2000);
+    } catch (err) {
+      setError(
+        err.response?.data?.message || "Signup failed"
+      );
+    }
+  };
+
+  return (
+    <div className="w-full">
+
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-6"
+      >
+
+        {/* Error */}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-300 px-4 py-3 rounded-2xl backdrop-blur-xl">
+            {error}
+          </div>
+        )}
+
+        {/* Success */}
+        {success && (
+          <div className="bg-green-500/10 border border-green-500/20 text-green-300 px-4 py-3 rounded-2xl backdrop-blur-xl">
+            {success}
+          </div>
+        )}
+
+        {/* Name */}
+        <div className="relative">
+          <FaUser className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+
+          <input
+            type="text"
+            name="name"
+            placeholder="Full Name"
+            value={formData.name}
+            onChange={handleChange}
+            required
+            className="w-full bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl py-4 pl-12 pr-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
+          />
+        </div>
+
+        {/* Email */}
+        <div className="relative">
+          <FaEnvelope className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+
+          <input
+            type="email"
+            name="email"
+            placeholder="Email Address"
+            value={formData.email}
+            onChange={handleChange}
+            required
+            className="w-full bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl py-4 pl-12 pr-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
+          />
+        </div>
+
+        {/* Password */}
+        <div className="relative">
+          <FaLock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+
+          <input
+            type="password"
+            name="password"
+            placeholder="Password"
+            value={formData.password}
+            onChange={handleChange}
+            required
+            className="w-full bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl py-4 pl-12 pr-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
+          />
+        </div>
+
+        {/* Address */}
+        <div className="relative">
+          <FaMapMarkerAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+
+          <input
+            type="text"
+            name="address"
+            placeholder="Address"
+            value={formData.address}
+            onChange={handleChange}
+            required
+            className="w-full bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl py-4 pl-12 pr-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
+          />
+        </div>
+
+        {/* Role */}
+        <select
+          name="role"
+          value={formData.role}
+          onChange={handleChange}
+          className="w-full bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl py-4 px-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
+        >
+          <option
+            value="normal"
+            className="bg-[#111827]"
+          >
+            Normal User
+          </option>
+
+          <option
+            value="owner"
+            className="bg-[#111827]"
+          >
+            Store Owner
+          </option>
+        </select>
+
+        {/* Button */}
+        <button
+          type="submit"
+          className="group w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold text-lg flex items-center justify-center gap-3 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] transition-all duration-300"
+        >
+          Create Account
+
+          <FaArrowRight className="group-hover:translate-x-1 transition-transform duration-300" />
+        </button>
+
+        {/* Login Link */}
+        <p className="text-center text-gray-400 text-sm">
+          Already have an account?{" "}
+
+          <Link
+            to="/login"
+            className="text-indigo-400 hover:text-indigo-300 transition-colors font-medium"
+          >
+            Login
+          </Link>
+        </p>
+      </form>
+    </div>
+  );
+};
+
+export default SignupForm;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\common\ErrorBoundary.jsx === 
+// src/components/ErrorBoundary.jsx
+import React from 'react';
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 bg-white/80 backdrop-blur-xl border border-white/30 rounded-3xl shadow-[0_8px_32px_rgba(31,38,135,0.15)]">
+          <h2 className="text-red-600 text-xl font-bold mb-2">
+            Something went wrong.
+          </h2>
+
+          <p className="text-red-500 text-sm">
+            {this.state.error?.message}
+          </p>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+export default ErrorBoundary;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\common\Header.jsx === 
+// src/components/common/Header.jsx
+
+import React, { useState } from "react";
+import { FaUserCircle, FaBars, FaTimes } from "react-icons/fa";
+import UserProfile from "../common/UserProfile";
+
+const Header = ({ title, user, logout, onOpenPassword }) => {
+  const [showProfile, setShowProfile] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  return (
+    <header className="sticky top-0 z-50 bg-[#0b1220]/80 text-white">
+
+      <div className="flex justify-between items-center p-4">
+
+        <h1 className="text-xl font-bold">{title}</h1>
+
+        <div className="hidden sm:flex items-center gap-4">
+
+          <div
+            onMouseEnter={() => setShowProfile(true)}
+            onMouseLeave={() => setShowProfile(false)}
+          >
+            <FaUserCircle className="text-3xl" />
+
+            {showProfile && (
+              <div className="absolute bg-[#111] p-3 rounded-xl">
+                <UserProfile />
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={onOpenPassword}
+            className="bg-purple-600 px-4 py-2 rounded-xl"
+          >
+            Change Password
+          </button>
+
+          <button
+            onClick={logout}
+            className="bg-gray-600 px-4 py-2 rounded-xl"
+          >
+            Logout
+          </button>
+
+        </div>
+
+        <button
+          className="sm:hidden"
+          onClick={() => setShowMobileMenu(!showMobileMenu)}
+        >
+          {showMobileMenu ? <FaTimes /> : <FaBars />}
+        </button>
+      </div>
+
+      {showMobileMenu && (
+        <div className="sm:hidden p-4 bg-[#0b1220]">
+          <button onClick={onOpenPassword} className="block w-full py-2 bg-purple-600">
+            Change Password
+          </button>
+
+          <button onClick={logout} className="block w-full py-2 bg-gray-600 mt-2">
+            Logout
+          </button>
+        </div>
+      )}
+
+    </header>
+  );
+};
+
+export default Header;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\common\ProtectedRoute.jsx === 
+// src/components/common/ProtectedRoute.jsx
+import React, { useContext } from "react";
+import { Navigate } from "react-router-dom";
+import { AuthContext } from "../../context/AuthContext";
+
+const ProtectedRoute = ({ roles, children }) => {
+  const { user, loading } = useContext(AuthContext);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+        
+        <div className="bg-white/70 backdrop-blur-2xl border border-white/30 rounded-3xl px-8 py-6 shadow-[0_8px_32px_rgba(31,38,135,0.15)] flex flex-col items-center gap-4">
+          
+          <div className="w-12 h-12 border-4 border-indigo-300 border-t-indigo-600 rounded-full animate-spin"></div>
+
+          <p className="text-gray-700 text-lg font-semibold">
+            Loading...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || (roles && !roles.includes(user.role))) {
+    return <Navigate to="/login" />;
+  }
+
+  return children;
+};
+
+export default ProtectedRoute;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\common\UpdatePasswordForm.jsx === 
+import React, { useState, useContext } from "react";
+import axios from "axios";
+import { AuthContext } from "../../context/AuthContext";
+import { FaEye, FaEyeSlash } from "react-icons/fa";
+
+// INPUT COMPONENT
+const InputField = ({ value, setValue, placeholder, show, setShow }) => {
+  return (
+    <div className="relative">
+      <input
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={placeholder}
+        className="w-full p-2 rounded bg-gray-800 pr-10 text-white"
+      />
+
+      <button
+        type="button"
+        onClick={() => setShow(!show)}
+        className="absolute right-2 top-2 text-gray-300"
+      >
+        {show ? <FaEyeSlash /> : <FaEye />}
+      </button>
+    </div>
+  );
+};
+
+const UpdatePasswordForm = ({ onSuccess }) => {
+  const { authHeaders } = useContext(AuthContext);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    setMessage("");
+    setIsSuccess(false);
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setMessage("All fields are required");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setMessage("Passwords do not match");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const res = await axios.put(
+        "http://localhost:5000/api/auth/update-password",
+        {
+          oldPassword: currentPassword,
+          newPassword,
+        },
+        {
+          headers: authHeaders(),
+        }
+      );
+
+      setIsSuccess(true);
+      setMessage(res.data.message || "Password updated successfully");
+
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+
+      onSuccess?.();
+    } catch (err) {
+      setIsSuccess(false);
+      setMessage(err.response?.data?.message || "Failed to update password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 text-white">
+
+      <h2 className="text-xl font-bold">Update Password</h2>
+
+      <InputField
+        value={currentPassword}
+        setValue={setCurrentPassword}
+        placeholder="Current Password"
+        show={showCurrent}
+        setShow={setShowCurrent}
+      />
+
+      <InputField
+        value={newPassword}
+        setValue={setNewPassword}
+        placeholder="New Password"
+        show={showNew}
+        setShow={setShowNew}
+      />
+
+      <InputField
+        value={confirmPassword}
+        setValue={setConfirmPassword}
+        placeholder="Confirm Password"
+        show={showConfirm}
+        setShow={setShowConfirm}
+      />
+
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full bg-purple-600 py-2 rounded hover:bg-purple-700"
+      >
+        {loading ? "Updating..." : "Update Password"}
+      </button>
+
+      {message && (
+        <p className={`text-sm text-center mt-2 ${
+          isSuccess ? "text-green-400" : "text-red-400"
+        }`}>
+          {message}
+        </p>
+      )}
+    </form>
+  );
+};
+
+export default UpdatePasswordForm;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\common\UserProfile.jsx === 
+import React, { useContext } from "react";
+import { AuthContext } from "../../context/AuthContext";
+
+const UserProfile = () => {
+  const { user } = useContext(AuthContext);
+
+  if (!user) {
+    return (
+      <p className="text-center text-gray-400 mt-10">
+        Loading profile...
+      </p>
+    );
+  }
+
+  return (
+    <div className="w-full max-w-2xl mx-auto mt-10 text-white">
+
+      {/* DARK PURPLE GLASS (NO WHITE OVERLAY) */}
+      <div className="rounded-3xl bg-[#120a1f]/90 backdrop-blur-xl shadow-[0_0_35px_rgba(147,51,234,0.12)] p-6 sm:p-8">
+
+        <h2 className="text-2xl font-bold text-center mb-6 text-white/80">
+          Profile Info
+        </h2>
+
+        <div className="space-y-5 text-sm sm:text-base">
+
+          <div className="flex justify-between">
+            <span className="text-white/40">Name</span>
+            <span className="text-white/80 font-medium">{user.name}</span>
+          </div>
+
+          <div className="flex justify-between">
+            <span className="text-white/40">Email</span>
+            <span className="text-white/80 font-medium break-all">
+              {user.email}
+            </span>
+          </div>
+
+          <div className="flex justify-between">
+            <span className="text-white/40">Address</span>
+            <span className="text-white/80 font-medium">
+              {user.address}
+            </span>
+          </div>
+
+          <div className="flex justify-between items-center">
+            <span className="text-white/40">Role</span>
+
+            <span
+              className={`px-3 py-1 rounded-full text-xs font-medium
+                ${
+                  user.role === "admin"
+                    ? "bg-red-500/10 text-red-300"
+                    : user.role === "store_owner"
+                    ? "bg-green-500/10 text-green-300"
+                    : "bg-blue-500/10 text-blue-300"
+                }`}
+            >
+              {user.role?.replace("_", " ").toUpperCase()}
+            </span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default UserProfile;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\owner\StoreRatings.jsx === 
+// src/components/admin/StoreRatings.jsx
+import React, { useState, useMemo } from "react";
+import { motion } from "framer-motion";
+import { FaUser, FaStar } from "react-icons/fa";
+
+const StoreRatings = ({ ratings }) => {
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredRatings = useMemo(() => {
+    if (!searchTerm) return ratings;
+
+    return ratings.filter((r) => {
+      const nameMatch = r.user?.name
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase());
+
+      const ratingMatch = r.rating
+        .toString()
+        .includes(searchTerm);
+
+      return nameMatch || ratingMatch;
+    });
+  }, [searchTerm, ratings]);
+
+  if (!ratings || ratings.length === 0) {
+    return (
+      <div className="bg-white/60 backdrop-blur-2xl border border-white/30 rounded-3xl p-8 shadow-[0_8px_32px_rgba(31,38,135,0.15)] text-center mt-6">
+        <p className="text-gray-500 text-sm sm:text-base">
+          No ratings submitted yet.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 w-full px-2 sm:px-4 md:px-6 lg:px-8 xl:px-10">
+
+      {/* Heading */}
+      <div className="text-center mb-8">
+        <h3 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 bg-clip-text text-transparent">
+          Store Ratings
+        </h3>
+
+        <p className="text-gray-500 mt-2 text-sm sm:text-base">
+          View all submitted user ratings
+        </p>
+      </div>
+
+      {/* Search */}
+      <div className="flex justify-center mb-8">
+        <input
+          type="text"
+          placeholder="Search by user or rating..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full max-w-md px-5 py-3 rounded-2xl border border-white/30 bg-white/70 backdrop-blur-xl shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all duration-300"
+        />
+      </div>
+
+      {/* Rating Cards */}
+      <div className="grid gap-5 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        
+        {filteredRatings.length > 0 ? (
+          filteredRatings.map((r) => (
+            <motion.div
+              key={r.id}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              whileHover={{
+                scale: 1.03,
+                y: -5,
+              }}
+              transition={{ duration: 0.3 }}
+              className="bg-white/70 backdrop-blur-2xl border border-white/30 rounded-3xl p-5 shadow-[0_8px_32px_rgba(31,38,135,0.12)] hover:shadow-[0_8px_32px_rgba(79,70,229,0.25)] flex items-center gap-4"
+            >
+
+              {/* User Icon */}
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg">
+                <FaUser className="text-white text-2xl" />
+              </div>
+
+              {/* User Info */}
+              <div className="flex-1">
+                <p className="font-bold text-gray-800 text-base sm:text-lg">
+                  {r.user?.name || "Unknown User"}
+                </p>
+
+                <div className="flex items-center gap-2 mt-2 text-yellow-500 font-semibold text-sm sm:text-base">
+                  <FaStar />
+                  {r.rating.toFixed(1)}
+                </div>
+              </div>
+            </motion.div>
+          ))
+        ) : (
+          <div className="col-span-full text-center bg-white/60 backdrop-blur-xl border border-white/30 rounded-3xl p-8 shadow-md">
+            <p className="text-gray-500">
+              No matching results.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default StoreRatings;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\user\RateStoreForm.jsx === 
+import React, { useState } from "react";
+import API, { setToken } from "../../services/api";
+
+const RateStoreForm = ({ store, onRatingUpdate }) => {
+  const [rating, setRating] = useState(store.userRating || 0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    setLoading(true);
+    setError("");
+
+    try {
+      setToken(localStorage.getItem("token"));
+
+      await API.post(`/stores/${store.id}/rate`, {
+        rating,
+      });
+
+      onRatingUpdate(store.id, rating);
+    } catch (err) {
+      setError(
+        err.response?.data?.message || "Failed to submit rating"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="bg-gray-900/80 border border-gray-700 rounded-3xl p-4 shadow-lg flex flex-wrap items-center gap-4 text-gray-100"
+    >
+      {/* Store Name */}
+      <div className="flex-1 min-w-[180px]">
+        <label className="block text-xs text-gray-400 mb-1">
+          Store
+        </label>
+
+        <p className="font-semibold text-gray-100">
+          {store.name}
+        </p>
+      </div>
+
+      {/* Rating Input */}
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">
+          Rating
+        </label>
+
+        <input
+          type="number"
+          min="1"
+          max="5"
+          value={rating}
+          onChange={(e) => setRating(Number(e.target.value))}
+          className="w-24 px-4 py-2 rounded-2xl bg-gray-800 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
+        />
+      </div>
+
+      {/* Submit Button */}
+      <div className="flex items-end">
+        <button
+          type="submit"
+          disabled={loading}
+          className="px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md hover:scale-105 transition-all duration-300 disabled:opacity-50"
+        >
+          {loading ? "Submitting..." : rating ? "Update Rating" : "Submit"}
+        </button>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="w-full bg-red-900/40 border border-red-700 text-red-300 px-4 py-2 rounded-2xl text-sm">
+          {error}
+        </div>
+      )}
+    </form>
+  );
+};
+
+export default RateStoreForm;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\user\StoreCard.jsx === 
+// src/components/admin/StoreCard.jsx
+import React from "react";
+import RateStoreForm from "./RateStoreForm";
+import {
+  FaStar,
+  FaMapMarkerAlt,
+  FaStore,
+} from "react-icons/fa";
+import { motion } from "framer-motion";
+
+const StoreCard = ({ store, onRatingUpdate }) => {
+  return (
+    <motion.div
+      whileHover={{
+        scale: 1.03,
+        y: -5,
+      }}
+      transition={{ duration: 0.3 }}
+      className="bg-white/90 backdrop-blur-xl border border-gray-200 rounded-3xl p-6 shadow-[0_8px_32px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_32px_rgba(79,70,229,0.20)] flex flex-col gap-5"
+    >
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center shadow-md">
+          <FaStore className="text-white text-2xl" />
+        </div>
+
+        <div>
+          <h3 className="text-xl font-bold text-gray-900">
+            {store.name}
+          </h3>
+
+          <p className="flex items-center gap-2 text-gray-600 text-sm mt-1">
+            <FaMapMarkerAlt className="text-indigo-600" />
+            {store.address}
+          </p>
+        </div>
+      </div>
+
+      {/* Rating */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+        <span className="text-gray-800 font-medium">
+          Overall Rating
+        </span>
+
+        <div className="flex items-center gap-2 text-yellow-500 font-semibold text-lg bg-yellow-50 px-3 py-1 rounded-lg border border-yellow-100">
+          <FaStar className="text-yellow-500" />
+
+          <span className="text-gray-900">
+            {store.overallRating !== null
+              ? store.overallRating.toFixed(1)
+              : "N/A"}
+          </span>
+        </div>
+      </div>
+
+      {/* Form */}
+      <RateStoreForm
+        store={store}
+        onRatingUpdate={onRatingUpdate}
+      />
+    </motion.div>
+  );
+};
+
+export default StoreCard;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\components\user\StoreList.jsx === 
+import React, {
+  useEffect,
+  useState,
+  useContext,
+} from "react";
+
+import { AuthContext } from "../../context/AuthContext";
+import StoreCard from "./StoreCard";
+
+const StoreList = () => {
+  const { API } = useContext(AuthContext);
+
+  const [stores, setStores] = useState([]);
+  const [search, setSearch] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const fetchStores = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await API.get("/stores/user");
+      setStores(res.data || []);
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.response?.data?.message ||
+          "Failed to fetch stores"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStores();
+  }, []);
+
+  const filteredStores = stores.filter(
+    (store) =>
+      store.name
+        .toLowerCase()
+        .includes(search.toLowerCase()) ||
+      store.address
+        .toLowerCase()
+        .includes(search.toLowerCase())
+  );
+
+  const handleRatingUpdate = () => {
+    fetchStores();
+  };
+
+  return (
+    <div className="space-y-6">
+
+     {/* Search */}
+<div className="bg-gray-900/80 border border-gray-700 rounded-3xl p-5 shadow-lg">
+  <input
+    type="text"
+    placeholder="Search by name or address..."
+    value={search}
+    onChange={(e) => setSearch(e.target.value)}
+    className="w-full px-5 py-3 rounded-2xl bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
+  />
+</div>
+
+      {/* Loading */}
+      {loading && (
+        <div className="bg-white/60 backdrop-blur-2xl border border-white/30 rounded-3xl p-6 shadow-md text-center">
+          <p className="text-indigo-600 font-semibold">
+            Loading stores...
+          </p>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="bg-red-100 border border-red-300 text-red-600 px-5 py-4 rounded-3xl">
+          {error}
+        </div>
+      )}
+
+      {/* Store Grid */}
+      <div className="grid xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+        
+        {filteredStores.length > 0 ? (
+          filteredStores.map((store) => (
+            <StoreCard
+              key={store.id}
+              store={store}
+              onRatingUpdate={handleRatingUpdate}
+            />
+          ))
+        ) : (
+          <div className="col-span-full bg-white/60 backdrop-blur-2xl border border-white/30 rounded-3xl p-8 shadow-md text-center">
+            <p className="text-gray-500">
+              No stores found.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default StoreList;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\context\AuthContext.jsx === 
+// src/context/AuthContext.jsx
+
+import React, { createContext, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import API, { setToken } from "../services/api";
+
+export const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const navigate = useNavigate();
+
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  // ✅ LOGOUT
+  const logout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setToken(null);
+    setUser(null);
+    navigate("/login");
+  };
+
+  // ✅ GET USER ON REFRESH
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const token = localStorage.getItem("token");
+
+        if (!token || token === "null") {
+          setLoading(false);
+          return;
+        }
+
+        setToken(token);
+
+        const res = await API.get("/auth/me");
+        setUser(res.data.user);
+      } catch (error) {
+        console.error("Failed to fetch user:", error);
+        logout();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUser();
+  }, []);
+
+  // ✅ SIGNUP
+  const signup = async (name, email, password, address) => {
+    try {
+      const res = await API.post("/auth/signup", {
+        name,
+        email,
+        password,
+        address,
+      });
+
+      setMessage("Signup successful!");
+      return res.data;
+    } catch (error) {
+      console.log("Signup error:", error.response?.data);
+      throw new Error(
+        error.response?.data?.message || "Signup failed"
+      );
+    }
+  };
+
+  // ✅ LOGIN (FIXED SWITCH & ROUTING RACE CONDITION)
+  const login = async (email, password) => {
+    try {
+      const res = await API.post("/auth/login", {
+        email,
+        password,
+      });
+
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("user", JSON.stringify(res.data.user));
+
+      setToken(res.data.token);
+      setUser(res.data.user);
+
+      setMessage("Login successful!");
+
+      // ✅ Instantly route without setTimeout to fix redirection bugs
+      switch (res.data.user.role) {
+        case "admin":
+          navigate("/admin");
+          break;
+
+        case "store_owner":
+          navigate("/owner");
+          break;
+
+        case "normal":
+        default:
+          navigate("/user");
+          break;
+      }
+
+      return res.data;
+    } catch (error) {
+      console.log("Login error:", error.response?.data);
+      throw new Error(
+        error.response?.data?.message || "Login failed"
+      );
+    }
+  };
+
+  // ✅ AUTH HEADERS
+  const authHeaders = () => {
+    const token = localStorage.getItem("token");
+    return {
+      Authorization: token ? `Bearer ${token}` : "",
+    };
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        message,
+        setMessage,
+        signup,
+        login,
+        logout,
+        authHeaders,
+        API,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\pages\AdminDashboard.jsx === 
+import React, { useContext, useEffect, useState } from "react";
+import axios from "axios";
+import { motion } from "framer-motion";
+import AdminCharts from "../components/admin/AdminCharts";
+
+import {
+  FaUsers,
+  FaStore,
+  FaChartLine,
+  FaPlus,
+  FaUserShield,
+} from "react-icons/fa";
+
+import { AuthContext } from "../context/AuthContext";
+
+import AddUserForm from "../components/admin/AddUserForm";
+import UserTable from "../components/admin/UserTable";
+import StoreTable from "../components/admin/StoreTable";
+import AddStoreForm from "../components/admin/AddStoreForm";
+import UserDetailsModal from "../components/admin/UserDetailsModal";
+import StoreDetailsModal from "../components/admin/StoreDetailsModal";
+import AdminStats from "../components/admin/AdminStats";
+import Header from "../components/common/Header";
+import UpdatePasswordForm from "../components/common/UpdatePasswordForm";
+
+const AdminDashboard = () => {
+  const { user, logout, authHeaders } = useContext(AuthContext);
+
+  const [stats, setStats] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [stores, setStores] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [showAddStore, setShowAddStore] = useState(false);
+
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [selectedStoreId, setSelectedStoreId] = useState(null);
+
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+  const fetchAdminData = async () => {
+    try {
+      setLoading(true);
+
+      const headers = authHeaders();
+
+      const statsRes = await axios.get(
+        "http://localhost:5000/api/admin/dashboard",
+        { headers }
+      );
+
+      setStats(statsRes.data);
+
+      const usersRes = await axios.get(
+        "http://localhost:5000/api/admin/users",
+        { headers }
+      );
+
+      setUsers(usersRes.data.users || []);
+
+      const storesRes = await axios.get(
+        "http://localhost:5000/api/admin/stores",
+        { headers }
+      );
+
+      setStores(storesRes.data.stores || []);
+    } catch (err) {
+      console.error(err);
+
+      if (err.response?.status === 401) {
+        logout();
+      }
+
+      setError(
+        err.response?.data?.message || "Failed to load dashboard"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAdminData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#050816] flex items-center justify-center text-white text-xl">
+        Loading Admin Dashboard...
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-[#050816] text-white">
+
+      {/* Background */}
+      <div className="absolute inset-0">
+        <div className="absolute top-0 left-0 w-72 h-72 bg-purple-600 opacity-20 blur-3xl rounded-full animate-pulse"></div>
+        <div className="absolute bottom-0 right-0 w-72 h-72 bg-indigo-600 opacity-20 blur-3xl rounded-full animate-pulse"></div>
+      </div>
+
+      {/* Header */}
+      <Header
+        title="Admin Dashboard"
+        user={user}
+        logout={logout}
+        onOpenPassword={() => setShowPasswordModal(true)}
+      />
+
+      {/* Main */}
+      <div className="relative z-10 pt-24 px-4 sm:px-6 lg:px-10">
+
+        {/* Top Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="backdrop-blur-xl bg-white/10 border border-white/10 rounded-3xl p-8 shadow-2xl mb-8"
+        >
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+
+            <div className="flex items-center gap-5">
+
+              <div className="w-24 h-24 rounded-3xl bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center shadow-2xl">
+                <FaUserShield className="text-5xl text-white" />
+              </div>
+
+              <div>
+                <h1 className="text-4xl font-bold">
+                  Welcome Admin
+                </h1>
+
+                <p className="text-gray-300 mt-2 text-lg">
+                  Manage stores, users and platform analytics
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-4">
+
+              <button
+                onClick={() => setShowAddUser(true)}
+                className="flex items-center gap-3 px-6 py-4 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:scale-105 transition"
+              >
+                <FaPlus />
+                Add User
+              </button>
+
+              <button
+                onClick={() => setShowAddStore(true)}
+                className="flex items-center gap-3 px-6 py-4 rounded-2xl border border-white/10 bg-white/10 hover:bg-white/20 transition"
+              >
+                <FaPlus />
+                Add Store
+              </button>
+
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Stats + Charts */}
+{stats && (
+  <>
+    <div className="mb-8">
+      <AdminStats stats={stats} />
+    </div>
+
+    {/* 👇 ADD CHARTS RIGHT BELOW STATS */}
+    <AdminCharts stats={stats} />
+  </>
+)}
+
+        {/* Users */}
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="backdrop-blur-xl bg-white/10 border border-white/10 rounded-3xl p-6 shadow-2xl mb-8"
+        >
+          <UserTable
+            users={users}
+            onViewDetails={(id) => setSelectedUserId(id)}
+          />
+        </motion.div>
+
+        {/* Stores */}
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="backdrop-blur-xl bg-white/10 border border-white/10 rounded-3xl p-6 shadow-2xl"
+        >
+          <StoreTable
+            stores={stores}
+            onViewDetails={(id) => setSelectedStoreId(id)}
+          />
+        </motion.div>
+      </div>
+
+      {/* ADD USER MODAL */}
+      {showAddUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl bg-[#0f172a] p-6 relative">
+            <button
+              onClick={() => setShowAddUser(false)}
+              className="absolute top-4 right-4 text-2xl"
+            >
+              ✖
+            </button>
+
+            <AddUserForm
+              onUserAdded={() => {
+                setShowAddUser(false);
+                fetchAdminData();
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ADD STORE */}
+      {showAddStore && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl bg-[#0f172a] p-6 relative">
+            <button
+              onClick={() => setShowAddStore(false)}
+              className="absolute top-4 right-4 text-2xl"
+            >
+              ✖
+            </button>
+
+            <AddStoreForm
+              refresh={() => {
+                setShowAddStore(false);
+                fetchAdminData();
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 FIXED: USER DETAILS MODAL */}
+      {selectedUserId && (
+        <UserDetailsModal
+          userId={selectedUserId}
+          onClose={() => setSelectedUserId(null)}
+        />
+      )}
+
+      {/* STORE DETAILS MODAL */}
+      {selectedStoreId && (
+        <StoreDetailsModal
+          storeId={selectedStoreId}
+          onClose={() => setSelectedStoreId(null)}
+        />
+      )}
+
+      {/* PASSWORD MODAL */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-[999] bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[#0b1220] p-6 rounded-2xl relative">
+            <button
+              onClick={() => setShowPasswordModal(false)}
+              className="absolute top-3 right-3 text-white text-xl"
+            >
+              ✕
+            </button>
+
+            <UpdatePasswordForm />
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+export default AdminDashboard;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\pages\GetStartedPage.jsx === 
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  FaStar,
+  FaArrowRight,
+  FaStore,
+  FaUsers,
+  FaChartLine,
+} from "react-icons/fa";
+import { motion } from "framer-motion";
+
+const GetStartedPage = () => {
+  const navigate = useNavigate();
+
+  const handleGetStarted = () => {
+    navigate("/login");
+  };
+
+  const features = [
+    {
+      icon: <FaStore />,
+      title: "Discover Stores",
+      desc: "Find top-rated stores near you instantly.",
+    },
+    {
+      icon: <FaUsers />,
+      title: "Real Reviews",
+      desc: "See trusted ratings from real users.",
+    },
+    {
+      icon: <FaChartLine />,
+      title: "Smart Insights",
+      desc: "Track popular and trending stores easily.",
+    },
+  ];
+
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-[#050816] text-white flex items-center justify-center px-4 sm:px-6 py-10">
+      
+      {/* Animated Background */}
+      <div className="absolute inset-0">
+        <div className="absolute top-0 left-0 w-72 h-72 bg-purple-600 opacity-30 blur-3xl rounded-full animate-pulse"></div>
+
+        <div className="absolute bottom-0 right-0 w-72 h-72 bg-indigo-600 opacity-30 blur-3xl rounded-full animate-pulse"></div>
+
+        <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-pink-500 opacity-10 blur-3xl rounded-full -translate-x-1/2 -translate-y-1/2"></div>
+      </div>
+
+      {/* Glass Container */}
+      <motion.main
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 1 }}
+        className="relative z-10 w-full max-w-6xl backdrop-blur-xl bg-white/10 border border-white/10 rounded-3xl shadow-2xl p-6 sm:p-10 lg:p-14"
+      >
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          
+          {/* Left Content */}
+          <div>
+            {/* Logo */}
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ duration: 0.6 }}
+              className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl flex items-center justify-center shadow-2xl mb-8"
+            >
+              <FaStar className="text-white text-5xl" />
+            </motion.div>
+
+            {/* Heading */}
+            <motion.h1
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight mb-6"
+            >
+              Discover & book
+              <span className="block bg-gradient-to-r from-indigo-400 to-purple-500 bg-clip-text text-transparent">
+                your event
+              </span>
+            </motion.h1>
+
+            {/* Description */}
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="text-gray-300 text-lg sm:text-xl leading-relaxed mb-10"
+            >
+              Lorem ipsum dolor sit amet consectetur adipisicing elit. Excepturi, reiciendis illum blanditiis aspernatur assumenda sequi dolores, laudantium debitis suscipit dolor temporibus velit asperiores aut quo quod amet totam illo dolore?
+            </motion.p>
+
+            {/* Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <motion.button
+                whileHover={{
+                  scale: 1.05,
+                  boxShadow: "0px 0px 30px rgba(99,102,241,0.8)",
+                }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleGetStarted}
+                className="group px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all duration-300"
+              >
+                Get Started
+                <FaArrowRight className="group-hover:translate-x-1 transition-transform duration-300" />
+              </motion.button>
+
+              <button className="px-8 py-4 border border-white/20 bg-white/5 rounded-2xl font-semibold hover:bg-white/10 transition duration-300">
+                Explore 
+              </button>
+            </div>
+          </div>
+
+          {/* Right Content */}
+          <div className="grid gap-6">
+            {features.map((feature, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, x: 80 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.2 }}
+                whileHover={{
+                  scale: 1.03,
+                  borderColor: "#8b5cf6",
+                }}
+                className="bg-white/10 border border-white/10 rounded-3xl p-6 backdrop-blur-lg shadow-xl hover:shadow-purple-500/20 transition-all duration-300"
+              >
+                <div className="flex items-start gap-5">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center text-2xl shadow-lg">
+                    {feature.icon}
+                  </div>
+
+                  <div>
+                    <h3 className="text-2xl font-bold mb-2">
+                      {feature.title}
+                    </h3>
+
+                    <p className="text-gray-300 leading-relaxed">
+                      {feature.desc}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+
+            {/* Stats */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1 }}
+              className="grid grid-cols-3 gap-4 mt-2"
+            >
+              <div className="bg-white/10 rounded-2xl p-5 text-center">
+                <h2 className="text-3xl font-bold text-indigo-400">10K+</h2>
+                <p className="text-gray-300 text-sm mt-1">Users</p>
+              </div>
+
+              <div className="bg-white/10 rounded-2xl p-5 text-center">
+                <h2 className="text-3xl font-bold text-purple-400">5K+</h2>
+                <p className="text-gray-300 text-sm mt-1">Stores</p>
+              </div>
+
+              <div className="bg-white/10 rounded-2xl p-5 text-center">
+                <h2 className="text-3xl font-bold text-pink-400">50K+</h2>
+                <p className="text-gray-300 text-sm mt-1">Reviews</p>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </motion.main>
+    </div>
+  );
+};
+
+export default GetStartedPage;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\pages\LoginPage.jsx === 
+import React, { useState, useContext } from "react";
+import { AuthContext } from "../context/AuthContext";
+import { FaEnvelope, FaLock, FaArrowRight, FaEye, FaEyeSlash } from "react-icons/fa";
+import { Link } from "react-router-dom";
+
+const LoginForm = () => {
+  const { login } = useContext(AuthContext);
+
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
+
+  const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    try {
+      await login(formData.email, formData.password);
+    } catch (err) {
+      const msg = err?.response?.data?.message;
+
+      if (!err.response) {
+        setError("Login failed: Check internet or server");
+      } else if (msg?.toLowerCase().includes("not found")) {
+        setError("User does not exist, please sign up");
+      } else if (
+        msg?.toLowerCase().includes("invalid") ||
+        msg?.toLowerCase().includes("password")
+      ) {
+        setError("Invalid credentials");
+      } else {
+        setError(msg || "Login failed");
+      }
+    }
+  };
+
+  return (
+    <div className="relative min-h-screen flex items-center justify-center bg-[#050816] text-white px-4">
+
+      {/* BACKGROUND BLUR */}
+      <div className="absolute inset-0">
+        <div className="absolute top-0 left-0 w-72 h-72 bg-purple-600 opacity-30 blur-3xl rounded-full animate-pulse"></div>
+        <div className="absolute bottom-0 right-0 w-72 h-72 bg-indigo-600 opacity-30 blur-3xl rounded-full animate-pulse"></div>
+        <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-pink-500 opacity-10 blur-3xl rounded-full -translate-x-1/2 -translate-y-1/2"></div>
+      </div>
+
+      {/* MAIN CONTAINER */}
+      <div className="relative z-10 w-full max-w-6xl backdrop-blur-xl bg-white/10 border border-white/10 rounded-3xl shadow-2xl p-6 sm:p-10 lg:p-14">
+
+        <div className="grid lg:grid-cols-2 gap-10 items-center">
+
+          {/* LEFT SIDE - FORM */}
+          <div className="space-y-6">
+
+            <h2 className="text-3xl sm:text-4xl font-bold">
+              Welcome Back 👋
+            </h2>
+
+            <p className="text-gray-300">
+              Login to explore stores and manage your dashboard.
+            </p>
+
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/20 text-red-300 px-4 py-2 rounded-xl">
+                {error}
+              </div>
+            )}
+
+            {/* INPUTS */}
+            <div className="space-y-4">
+
+              <div className="relative">
+                <FaEnvelope className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="Email"
+                  onChange={handleChange}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 text-white focus:outline-none"
+                />
+              </div>
+
+              {/* PASSWORD WITH TOGGLE */}
+              <div className="relative">
+                <FaLock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  placeholder="Password"
+                  onChange={handleChange}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-12 text-white focus:outline-none"
+                />
+
+                <div
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 cursor-pointer"
+                >
+                  {showPassword ? <FaEyeSlash /> : <FaEye />}
+                </div>
+              </div>
+
+            </div>
+
+            {/* BUTTON */}
+            <button
+              onClick={handleSubmit}
+              className="w-full py-4 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl font-bold flex items-center justify-center gap-3"
+            >
+              Login <FaArrowRight />
+            </button>
+
+            {/* SIGNUP */}
+            <div className="text-center mt-6 text-gray-300">
+              Don't have an account?{" "}
+              <Link
+                to="/signup"
+                className="text-indigo-400 font-semibold hover:underline"
+              >
+                Sign Up
+              </Link>
+            </div>
+
+          </div>
+
+          {/* RIGHT SIDE - DEMO BOX */}
+          <div className="grid gap-6">
+
+            <div className="bg-white/10 border border-white/10 rounded-3xl p-6">
+              <h3 className="text-xl font-bold text-indigo-300">Admin</h3>
+              <p className="text-gray-300">admin@example.com</p>
+              <p className="text-gray-400">Admin@123</p>
+            </div>
+
+            <div className="bg-white/10 border border-white/10 rounded-3xl p-6">
+              <h3 className="text-xl font-bold text-purple-300">Store Owner</h3>
+              <p className="text-gray-300">owner@example.com</p>
+              <p className="text-gray-400">Owner@123</p>
+            </div>
+
+            <div className="bg-white/10 border border-white/10 rounded-3xl p-6">
+              <h3 className="text-xl font-bold text-pink-300">User</h3>
+              <p className="text-gray-300">user1@gmail.com</p>
+              <p className="text-gray-400">User@123</p>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default LoginForm;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\pages\OwnerDashboard.jsx === 
+// src/pages/OwnerDashboard.jsx
+
+import React, { useEffect, useState, useContext } from "react";
+import { motion } from "framer-motion";
+import {
+  FaStore,
+  FaStar,
+  FaUsers,
+  FaChartBar,
+} from "react-icons/fa";
+
+import { AuthContext } from "../context/AuthContext";
+import ProtectedRoute from "../components/common/ProtectedRoute";
+import StoreRatings from "../components/owner/StoreRatings";
+import Header from "../components/common/Header";
+import UpdatePasswordForm from "../components/common/UpdatePasswordForm";
+
+const OwnerDashboard = () => {
+  const { user, logout, API } = useContext(AuthContext);
+
+  const [store, setStore] = useState(null);
+  const [ratings, setRatings] = useState([]);
+  const [avgRating, setAvgRating] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  // ✅ PASSWORD MODAL STATE (FIX ADDED)
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+  useEffect(() => {
+    const fetchOwnerStore = async () => {
+      try {
+        const res = await API.get("/stores/owner");
+
+        const storeData = res.data.store;
+
+        setStore(storeData);
+
+        if (storeData?.ratings?.length > 0) {
+          setRatings(storeData.ratings);
+
+          const total = storeData.ratings.reduce(
+            (acc, r) => acc + r.rating,
+            0
+          );
+
+          setAvgRating(total / storeData.ratings.length);
+        }
+      } catch (err) {
+        console.error("Failed to fetch store data", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user?.role === "store_owner") {
+      fetchOwnerStore();
+    }
+  }, [user, API]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#050816] flex items-center justify-center text-white text-xl">
+        Loading Dashboard...
+      </div>
+    );
+  }
+
+  if (!store) {
+    return (
+      <div className="min-h-screen bg-[#050816] flex items-center justify-center text-red-400 text-xl font-bold">
+        No Store Found For Your Account
+      </div>
+    );
+  }
+
+  return (
+    <ProtectedRoute roles={["store_owner"]}>
+      <div className="relative min-h-screen overflow-hidden bg-[#050816] text-white">
+
+        {/* Header ✅ FIXED */}
+        <Header
+          title="Store Owner Dashboard"
+          user={user}
+          logout={logout}
+          onOpenPassword={() => setShowPasswordModal(true)}
+        />
+
+        <div className="relative z-10 pt-24 px-4 sm:px-6 lg:px-10">
+
+          {/* Store Overview */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="backdrop-blur-xl bg-white/10 border border-white/10 rounded-3xl shadow-2xl p-6 sm:p-8 mb-8"
+          >
+
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
+
+              <div className="flex items-center gap-5">
+
+                <div className="w-24 h-24 rounded-3xl bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center shadow-2xl">
+                  <FaStore className="text-white text-5xl" />
+                </div>
+
+                <div>
+                  <h1 className="text-3xl sm:text-4xl font-bold">
+                    {store.name}
+                  </h1>
+
+                  <p className="text-gray-300 mt-2 text-lg">
+                    Monitor your ratings and customer reviews
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full lg:w-auto">
+
+                <div className="bg-white/10 border border-white/10 rounded-2xl p-5 text-center">
+                  <FaStar className="mx-auto text-yellow-400 text-3xl mb-3" />
+                  <h2 className="text-3xl font-bold">
+                    {avgRating ? avgRating.toFixed(1) : "0"}
+                  </h2>
+                  <p className="text-gray-300 text-sm">Average Rating</p>
+                </div>
+
+                <div className="bg-white/10 border border-white/10 rounded-2xl p-5 text-center">
+                  <FaUsers className="mx-auto text-indigo-400 text-3xl mb-3" />
+                  <h2 className="text-3xl font-bold">{ratings.length}</h2>
+                  <p className="text-gray-300 text-sm">Total Reviews</p>
+                </div>
+
+                <div className="bg-white/10 border border-white/10 rounded-2xl p-5 text-center">
+                  <FaChartBar className="mx-auto text-pink-400 text-3xl mb-3" />
+                  <h2 className="text-3xl font-bold">Active</h2>
+                  <p className="text-gray-300 text-sm">Store Status</p>
+                </div>
+
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Ratings */}
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="backdrop-blur-xl bg-white/10 border border-white/10 rounded-3xl shadow-2xl p-6"
+          >
+            <h2 className="text-3xl font-bold mb-6">Customer Ratings</h2>
+            <StoreRatings ratings={ratings} />
+          </motion.div>
+
+        </div>
+
+        {/* PASSWORD MODAL (FIXED) */}
+        {showPasswordModal && (
+          <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60">
+
+            <div className="bg-[#0b1220] p-6 rounded-2xl w-full max-w-md relative">
+
+              <button
+                onClick={() => setShowPasswordModal(false)}
+                className="absolute top-2 right-2 text-white"
+              >
+                ✕
+              </button>
+
+              <UpdatePasswordForm />
+            </div>
+
+          </div>
+        )}
+
+      </div>
+    </ProtectedRoute>
+  );
+};
+
+export default OwnerDashboard;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\pages\SignupPage.jsx === 
+// src/pages/SignupPage.jsx
+
+import React from "react";
+import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import { FaUserPlus, FaArrowRight, FaStar } from "react-icons/fa";
+import SignupForm from "../components/auth/SignupForm";
+
+const SignupPage = () => {
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-[#050816] text-white flex items-center justify-center px-4 py-10">
+
+      {/* Background */}
+      <div className="absolute inset-0">
+        <div className="absolute top-0 left-0 w-72 h-72 bg-purple-600 opacity-30 blur-3xl rounded-full animate-pulse"></div>
+
+        <div className="absolute bottom-0 right-0 w-72 h-72 bg-indigo-600 opacity-30 blur-3xl rounded-full animate-pulse"></div>
+
+        <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-pink-500 opacity-10 blur-3xl rounded-full -translate-x-1/2 -translate-y-1/2"></div>
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 60 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8 }}
+        className="relative z-10 w-full max-w-md backdrop-blur-xl bg-white/10 border border-white/10 rounded-3xl shadow-2xl p-8 sm:p-10"
+      >
+
+        {/* Logo */}
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="w-20 h-20 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl"
+        >
+          <FaStar className="text-white text-4xl" />
+        </motion.div>
+
+        {/* Heading */}
+        <h2 className="text-3xl font-bold text-center mb-2">
+          Create Account
+        </h2>
+
+        <p className="text-gray-300 text-center mb-8">
+          Join the smartest store rating platform
+        </p>
+
+        {/* Form */}
+        <SignupForm />
+
+        {/* Divider */}
+        <div className="flex items-center gap-3 my-6">
+          <div className="flex-1 h-[1px] bg-white/10"></div>
+          <span className="text-gray-400 text-sm">OR</span>
+          <div className="flex-1 h-[1px] bg-white/10"></div>
+        </div>
+
+        {/* Login Link */}
+        <Link
+          to="/login"
+          className="group w-full flex items-center justify-center gap-3 px-6 py-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition duration-300"
+        >
+          <FaUserPlus className="text-indigo-400" />
+          <span>Already Have Account?</span>
+          <FaArrowRight className="group-hover:translate-x-1 transition-transform duration-300" />
+        </Link>
+      </motion.div>
+    </div>
+  );
+};
+
+export default SignupPage;.
+=== FILE: D:\Interview task\store-rating-application\store-rating-frontend\src\pages\UserDashboard.jsx === 
+import React, { useContext, useState } from "react";
+import { motion } from "framer-motion";
+import {
+  FaStore,
+  FaUserCircle,
+  FaChartLine,
+  FaStar,
+} from "react-icons/fa";
+
+import { AuthContext } from "../context/AuthContext";
+import Header from "../components/common/Header";
+import StoreList from "../components/user/StoreList";
+import UpdatePasswordForm from "../components/common/UpdatePasswordForm";
+
+const UserDashboard = () => {
+  const { user, logout } = useContext(AuthContext);
+
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-[#050816] text-white">
+
+      {/* BACKGROUND */}
+      <div className="absolute inset-0">
+        <div className="absolute top-0 left-0 w-72 h-72 bg-purple-600 opacity-20 blur-3xl rounded-full animate-pulse"></div>
+        <div className="absolute bottom-0 right-0 w-72 h-72 bg-indigo-600 opacity-20 blur-3xl rounded-full animate-pulse"></div>
+        <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-pink-500 opacity-10 blur-3xl rounded-full -translate-x-1/2 -translate-y-1/2"></div>
+      </div>
+
+      {/* HEADER */}
+      <Header
+        title="User Dashboard"
+        user={user}
+        logout={logout}
+        onOpenPassword={() => setShowPasswordModal(true)}
+      />
+
+      {/* MAIN */}
+      <div className="relative z-10 pt-24 px-4 sm:px-6 lg:px-10">
+
+        {/* WELCOME */}
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="backdrop-blur-xl bg-white/10 border border-white/10 rounded-3xl p-6 sm:p-8 mb-8"
+        >
+          <div className="flex items-center gap-5">
+            <FaUserCircle className="text-5xl text-white" />
+
+            <div>
+              <h1 className="text-3xl font-bold">
+                Welcome, {user?.name || "User"}
+              </h1>
+              <p className="text-gray-300">
+                Explore and rate stores
+              </p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* STORE LIST */}
+        <motion.div
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="backdrop-blur-xl bg-white/10 border border-white/10 rounded-3xl p-6"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <FaStore className="text-2xl text-white" />
+            <h2 className="text-2xl font-bold">Stores</h2>
+          </div>
+
+          <StoreList />
+        </motion.div>
+      </div>
+
+      {/* PASSWORD MODAL */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+
+          <div className="w-full max-w-md bg-[#0b1220] rounded-2xl p-6 relative">
+
+            <button
+              onClick={() => setShowPasswordModal(false)}
+              className="absolute top-3 right-3 text-white text-xl"
+            >
+              ✕
+            </button>
+
+            <UpdatePasswordForm />
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default UserDashboard;.

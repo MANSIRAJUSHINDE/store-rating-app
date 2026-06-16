@@ -6,6 +6,35 @@
 html, body {
   margin: 0;
   padding: 0;
+<<<<<<< HEAD
+=======
+  box-sizing: border-box;
+}
+:root {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --primary: #6366f1;
+}
+
+.dark {
+  --bg: #050816;
+  --card: #0b1220;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --border: #1e293b;
+  --primary: #6366f1;
+}
+/* Full Screen Setup */
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+>>>>>>> ac1d318 (Add source code files)
   font-family: 'Inter', sans-serif;
   background-color: #f3f4f6; /* fallback light background */
   overflow-x: auto; /* Allow horizontal scrolling when content overflows */
