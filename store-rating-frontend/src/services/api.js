@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 // HARDCODED FIX: Directly maps request pathways to your production Render server
+
 const rawUrl = "https://store-rating-backend-v986.onrender.com";
 
 const API = axios.create({
