@@ -9,24 +9,16 @@ const app = express();
 
 // Dynamic CORS configuration to allow local work and all your Vercel deployments
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow local development or tools like Postman (which don't send an origin header)
-    if (!origin || origin.startsWith("http://localhost:")) {
-      return callback(null, true);
-    }
-    
-    // Dynamically allow any URL containing your Vercel project name or profile footprint
-    if (origin.includes("mansirajushindes-projects.vercel.app") || origin.includes("store-rating-app")) {
-      return callback(null, true);
-    }
-    
-    // Block any other unauthorized domain
-    return callback(new Error("Blocked by CORS security wrapper"));
-  },
+  origin: [
+    "https://store-rating-app-ruddy.vercel.app",
+    "http://localhost:5173"
+  ],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true,
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
+
+app.options("*", cors());
 
 app.use(express.json());
 
