@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect } from "react";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import API from "../services/api";
 
 // Create context
 export const AuthContext = createContext();
@@ -8,42 +8,29 @@ export const AuthContext = createContext();
 // AuthProvider component
 export const AuthProvider = ({ children }) => {
   const navigate = useNavigate();
+
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true); // loading state for initial fetch
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
-
-  // HARDCODED FIX: Bypass Vercel env bugs by mapping directly to your live production Render backend
-  const rawUrl = "https://store-rating-app-deploy.onrender.com";
-
-  const API = axios.create({ 
-    baseURL: `${rawUrl}/api` 
-  });
-
-  // Automatically attach token to every request
-  API.interceptors.request.use((config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  });
 
   // Fetch logged-in user on app load
   useEffect(() => {
     const fetchUser = async () => {
       try {
         const token = localStorage.getItem("token");
+
         if (token) {
           const res = await API.get("/auth/me");
           setUser(res.data.user);
         }
       } catch (error) {
         console.error("Failed to fetch user:", error);
-        logout(); // remove invalid token
+        logout();
       } finally {
         setLoading(false);
       }
     };
+
     fetchUser();
   }, []);
 
@@ -55,28 +42,35 @@ export const AuthProvider = ({ children }) => {
       password,
       address,
     });
+
     localStorage.setItem("token", res.data.token);
     setUser(res.data.user);
+
     return res.data;
   };
 
   // Login
   const login = async (email, password) => {
     try {
-      const res = await API.post("/auth/login", { email, password });
+      const res = await API.post("/auth/login", {
+        email,
+        password,
+      });
+
       localStorage.setItem("token", res.data.token);
       setUser(res.data.user);
       setMessage("Login successful! Redirecting...");
 
       setTimeout(() => {
-        // Redirect based on role
         switch (res.data.user.role) {
           case "admin":
             navigate("/admin");
             break;
+
           case "store_owner":
             navigate("/owner");
             break;
+
           default:
             navigate("/user");
         }
@@ -95,15 +89,28 @@ export const AuthProvider = ({ children }) => {
     navigate("/login");
   };
 
-  // Helper: get headers manually (optional)
+  // Helper for manual auth headers
   const authHeaders = () => {
     const token = localStorage.getItem("token");
-    return { Authorization: token ? `Bearer ${token}` : "" };
+
+    return {
+      Authorization: token ? `Bearer ${token}` : "",
+    };
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, signup, login, logout, message, setMessage, authHeaders, API }}
+      value={{
+        user,
+        loading,
+        signup,
+        login,
+        logout,
+        message,
+        setMessage,
+        authHeaders,
+        API,
+      }}
     >
       {children}
     </AuthContext.Provider>
