@@ -9,16 +9,23 @@ const app = express();
 
 // Dynamic CORS configuration to allow local work and all your Vercel deployments
 app.use(cors({
-  origin: [
-    "https://store-rating-app-ruddy.vercel.app",
-    "http://localhost:5173"
-  ],
+  origin: function (origin, callback) {
+    if (!origin || origin.startsWith("http://localhost:")) {
+      return callback(null, true);
+    }
+
+    if (
+      origin === "https://store-rating-app-ruddy.vercel.app"
+    ) {
+      return callback(null, true);
+    }
+
+    return callback(new Error("Blocked by CORS"));
+  },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true,
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
-
-app.options("*", cors());
 
 app.use(express.json());
 
